@@ -1,0 +1,844 @@
+#alyce_wand_button {
+    align-items: center;
+}
+
+#alyce_workspace {
+    --alyce-bg-1: #f4efe4;
+    --alyce-bg-2: #e6d5b8;
+    --alyce-panel: rgba(255, 250, 241, 0.88);
+    --alyce-panel-strong: rgba(255, 247, 236, 0.96);
+    --alyce-line: rgba(114, 74, 34, 0.22);
+    --alyce-line-strong: rgba(114, 74, 34, 0.42);
+    --alyce-ink: #2d2318;
+    --alyce-muted: #6b5840;
+    --alyce-accent: #a45c2e;
+    --alyce-accent-strong: #814015;
+    --alyce-soft: #d9bc97;
+    --alyce-success: #3e7d56;
+    --alyce-warning: #b06c1d;
+    --alyce-danger: #a13a32;
+    color: var(--alyce-ink);
+}
+
+.popup:has(#alyce_workspace).large_dialogue_popup {
+    width: min(96vw, 1780px) !important;
+    max-width: min(96vw, 1780px) !important;
+}
+
+.popup:has(#alyce_workspace).wider_dialogue_popup {
+    min-width: min(96vw, 1580px);
+}
+
+#alyce_workspace .alyce__shell {
+    display: grid;
+    gap: 10px;
+    padding: 2px;
+    background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.7), transparent 35%),
+        linear-gradient(135deg, var(--alyce-bg-1), var(--alyce-bg-2));
+}
+
+#alyce_workspace .alyce__hero,
+#alyce_workspace .alyce__toolbar,
+#alyce_workspace .alyce__panel,
+#alyce_workspace .alyce__connectionBar,
+#alyce_workspace .alyce__statusBanner {
+    border: 1px solid var(--alyce-line);
+    border-radius: 16px;
+    background: var(--alyce-panel);
+    box-shadow: 0 14px 34px rgba(93, 61, 31, 0.08);
+}
+
+#alyce_workspace .alyce__hero {
+    display: grid;
+    justify-content: center;
+    gap: 10px;
+    align-items: center;
+    padding: 14px 18px;
+    text-align: center;
+}
+
+#alyce_workspace .alyce__heroCopy {
+    display: grid;
+    gap: 5px;
+    justify-items: center;
+    max-width: 860px;
+    margin: 0 auto;
+}
+
+#alyce_workspace .alyce__eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--alyce-accent-strong);
+    font-weight: 700;
+}
+
+#alyce_workspace .alyce__title {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.18;
+}
+
+#alyce_workspace .alyce__subtitle {
+    margin: 0;
+    max-width: 760px;
+    color: var(--alyce-muted);
+    line-height: 1.4;
+    font-size: 13px;
+}
+
+#alyce_workspace .alyce__modeTab.menu_button,
+#alyce_workspace .alyce__composerActions .menu_button {
+    border-radius: 999px;
+    border: 1px solid rgba(129, 64, 21, 0.2);
+    background: rgba(255, 255, 255, 0.62);
+}
+
+#alyce_workspace .alyce__modeTab.menu_button:hover,
+#alyce_workspace .alyce__composerActions .menu_button:hover {
+    background: rgba(164, 92, 46, 0.12);
+    border-color: rgba(129, 64, 21, 0.38);
+}
+
+#alyce_workspace .alyce__connectionBar,
+#alyce_workspace .alyce__statusBanner {
+    padding: 6px 10px;
+}
+
+#alyce_workspace .alyce__connectionBar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+    max-width: 1120px;
+    margin: 0 auto;
+}
+
+#alyce_workspace .alyce__chip {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(129, 64, 21, 0.15);
+    font-size: 10px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+#alyce_workspace .alyce__chipLabel {
+    color: var(--alyce-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 9px;
+}
+
+#alyce_workspace .alyce__chip strong {
+    font-weight: 700;
+}
+
+#alyce_workspace .alyce__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 12px;
+}
+
+#alyce_workspace .alyce__modeTabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: nowrap;
+    padding: 3px;
+    border-radius: 999px;
+    border: 1px solid rgba(129, 64, 21, 0.16);
+    background: rgba(255, 255, 255, 0.44);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+#alyce_workspace .alyce__modeTab.is-active {
+    background: linear-gradient(135deg, #9f663c, #73391a) !important;
+    border-color: rgba(115, 57, 26, 0.88) !important;
+    color: #fff7ef !important;
+    box-shadow: 0 10px 20px rgba(115, 57, 26, 0.24);
+}
+
+#alyce_workspace .alyce__modeTab.menu_button {
+    min-width: 58px;
+    white-space: nowrap;
+    padding: 7px 12px;
+    color: var(--alyce-muted);
+    font-weight: 800;
+    background: rgba(255, 255, 255, 0.82);
+    border-color: rgba(129, 64, 21, 0.18);
+    box-shadow: none;
+}
+
+#alyce_workspace .alyce__modeTab.menu_button:not(.is-active) {
+    opacity: 0.94;
+}
+
+#alyce_workspace .alyce__control,
+#alyce_workspace .alyce__toggle {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    color: var(--alyce-muted);
+}
+
+#alyce_workspace .alyce__toggle--strong {
+    padding: 5px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(129, 64, 21, 0.16);
+    color: var(--alyce-accent-strong);
+    font-weight: 700;
+    font-size: 13px;
+}
+
+#alyce_workspace .alyce__control input {
+    width: 80px;
+}
+
+#alyce_workspace .alyce__statusBanner {
+    color: var(--alyce-muted);
+    line-height: 1.5;
+}
+
+#alyce_workspace .alyce__statusBanner.is-running {
+    border-color: rgba(176, 108, 29, 0.32);
+    color: var(--alyce-warning);
+}
+
+#alyce_workspace .alyce__statusBanner.is-error {
+    border-color: rgba(161, 58, 50, 0.36);
+    color: var(--alyce-danger);
+}
+
+#alyce_workspace .alyce__linearGrid,
+#alyce_workspace .alyce__agentGrid {
+    display: grid;
+    gap: 10px;
+}
+
+#alyce_workspace .alyce__linearGrid {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+#alyce_workspace .alyce__agentGrid {
+    grid-template-columns: minmax(0, 1.65fr) minmax(360px, 0.9fr);
+    align-items: stretch;
+}
+
+#alyce_workspace .alyce__panel {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+}
+
+#alyce_workspace .alyce__panelHeader {
+    display: grid;
+    gap: 3px;
+}
+
+#alyce_workspace .alyce__panelHeader--left {
+    justify-items: start;
+    text-align: left;
+}
+
+#alyce_workspace .alyce__panelHeader h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+#alyce_workspace .alyce__panelHeader p {
+    margin: 0;
+    color: var(--alyce-muted);
+    line-height: 1.35;
+}
+
+#alyce_workspace .alyce__rail {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 14px 6px 8px;
+    scrollbar-gutter: stable both-edges;
+}
+
+#alyce_workspace .alyce__rail::before {
+    content: '';
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: 50%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--alyce-line-strong), transparent);
+    transform: translateY(-50%);
+}
+
+#alyce_workspace .alyce__insertButton,
+#alyce_workspace .alyce__nodeWrap,
+#alyce_workspace .alyce__nodeButton {
+    position: relative;
+    z-index: 1;
+}
+
+#alyce_workspace .alyce__nodeWrap {
+    display: flex;
+    align-items: stretch;
+}
+
+#alyce_workspace .alyce__insertButton {
+    width: 24px;
+    height: 24px;
+    border: 1px dashed rgba(129, 64, 21, 0.32);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.76);
+    color: var(--alyce-accent-strong);
+    cursor: pointer;
+}
+
+#alyce_workspace .alyce__insertButton:hover {
+    background: rgba(164, 92, 46, 0.12);
+}
+
+#alyce_workspace .alyce__nodeButton {
+    width: 88px;
+    min-height: 88px;
+    padding: 8px;
+    border: 1px solid rgba(129, 64, 21, 0.2);
+    border-radius: 16px;
+    background: linear-gradient(180deg, var(--alyce-panel-strong), rgba(255, 244, 229, 0.95));
+    display: grid;
+    gap: 4px;
+    justify-items: center;
+    align-content: start;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+#alyce_workspace .alyce__nodeButton:hover {
+    transform: translateY(-2px);
+    border-color: rgba(129, 64, 21, 0.38);
+    box-shadow: 0 12px 24px rgba(129, 64, 21, 0.1);
+}
+
+#alyce_workspace .alyce__nodeButton.is-selected {
+    border-color: rgba(164, 92, 46, 0.72);
+    box-shadow: 0 0 0 2px rgba(164, 92, 46, 0.12);
+}
+
+#alyce_workspace .alyce__nodeButton.is-current {
+    border-color: rgba(176, 108, 29, 0.74);
+}
+
+#alyce_workspace .alyce__nodeButton.is-completed {
+    border-color: rgba(62, 125, 86, 0.52);
+}
+
+#alyce_workspace .alyce__nodeButton.is-disabled {
+    opacity: 0.54;
+}
+
+#alyce_workspace .alyce__nodeType {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--alyce-accent-strong);
+}
+
+#alyce_workspace .alyce__nodeTitle {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.05;
+}
+
+#alyce_workspace .alyce__nodeMeta {
+    font-size: 10px;
+    color: var(--alyce-muted);
+    line-height: 1.25;
+}
+
+#alyce_workspace .alyce__nodeDelete {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(161, 58, 50, 0.28);
+    border-radius: 999px;
+    background: rgba(255, 248, 246, 0.95);
+    color: var(--alyce-danger);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    box-shadow: 0 8px 16px rgba(161, 58, 50, 0.12);
+}
+
+#alyce_workspace .alyce__nodeDelete:hover {
+    background: rgba(161, 58, 50, 0.1);
+}
+
+#alyce_workspace .alyce__editor,
+#alyce_workspace .alyce__detailsPanel,
+#alyce_workspace .alyce__agentStream,
+#alyce_workspace .alyce__composer {
+    display: grid;
+    gap: 10px;
+    justify-items: stretch;
+    text-align: left;
+}
+
+#alyce_workspace .alyce__editorOverview {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid var(--alyce-line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.62);
+}
+
+#alyce_workspace .alyce__editorEyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--alyce-accent-strong);
+}
+
+#alyce_workspace .alyce__editorHeading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+#alyce_workspace .alyce__editorTitleGroup {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#alyce_workspace .alyce__editorTitle {
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--alyce-ink);
+}
+
+#alyce_workspace .alyce__editorType,
+#alyce_workspace .alyce__editorState {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(129, 64, 21, 0.14);
+    background: rgba(255, 255, 255, 0.78);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--alyce-accent-strong);
+}
+
+#alyce_workspace .alyce__editorState.is-enabled {
+    color: var(--alyce-success);
+}
+
+#alyce_workspace .alyce__editorState.is-disabled {
+    color: var(--alyce-danger);
+}
+
+#alyce_workspace .alyce__editorOverview p {
+    margin: 0;
+    color: var(--alyce-muted);
+    line-height: 1.5;
+}
+
+#alyce_workspace .alyce__editorMetaGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+#alyce_workspace .alyce__field {
+    display: grid;
+    gap: 6px;
+    align-content: start;
+    justify-items: stretch;
+    text-align: left;
+    padding: 12px;
+    border: 1px solid var(--alyce-line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.58);
+}
+
+#alyce_workspace .alyce__field--toggle,
+#alyce_workspace .alyce__field--full {
+    grid-column: 1 / -1;
+}
+
+#alyce_workspace .alyce__fieldValue {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(129, 64, 21, 0.14);
+    background: rgba(255, 255, 255, 0.74);
+    color: var(--alyce-ink);
+    line-height: 1.45;
+}
+
+#alyce_workspace .alyce__field label,
+#alyce_workspace .alyce__composerLabel {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--alyce-accent-strong);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+#alyce_workspace .alyce__field p,
+#alyce_workspace .alyce__emptyState,
+#alyce_workspace .alyce__note {
+    margin: 0;
+    color: var(--alyce-muted);
+    line-height: 1.45;
+    text-align: left;
+}
+
+#alyce_workspace .alyce__field textarea,
+#alyce_workspace .alyce__field input[type="text"],
+#alyce_workspace .alyce__field input[type="number"],
+#alyce_workspace .alyce__composer textarea {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(129, 64, 21, 0.18);
+    background: rgba(255, 255, 255, 0.72);
+    padding: 10px 12px;
+    line-height: 1.5;
+    min-width: 0;
+    color: var(--alyce-ink);
+    font-size: 14px;
+}
+
+#alyce_workspace .alyce__field textarea,
+#alyce_workspace .alyce__composer textarea {
+    resize: vertical;
+}
+
+#alyce_workspace .alyce__field input[type="checkbox"],
+#alyce_workspace .alyce__toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    margin: 0;
+    accent-color: var(--alyce-accent);
+}
+
+#alyce_workspace .alyce__toggle {
+    color: var(--alyce-ink);
+    font-weight: 700;
+}
+
+#alyce_workspace .alyce__dangerButton {
+    justify-self: start;
+    border-color: rgba(161, 58, 50, 0.3);
+    color: var(--alyce-danger);
+}
+
+#alyce_workspace .alyce__stageLog,
+#alyce_workspace .alyce__agentStream,
+#alyce_workspace .alyce__todoPanel {
+    display: grid;
+    gap: 10px;
+}
+
+#alyce_workspace .alyce__emptyCard {
+    display: grid;
+    gap: 6px;
+    padding: 14px 16px;
+    border: 1px dashed rgba(129, 64, 21, 0.28);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.56);
+}
+
+#alyce_workspace .alyce__emptyCard strong {
+    font-size: 14px;
+    color: var(--alyce-ink);
+}
+
+#alyce_workspace .alyce__emptyCard p {
+    margin: 0;
+    color: var(--alyce-muted);
+    line-height: 1.5;
+}
+
+#alyce_workspace .alyce__stageCard,
+#alyce_workspace .alyce__streamItem,
+#alyce_workspace .alyce__todoItem,
+#alyce_workspace .alyce__detailCard {
+    border: 1px solid var(--alyce-line);
+    background: rgba(255, 255, 255, 0.64);
+    border-radius: 14px;
+    padding: 12px;
+}
+
+#alyce_workspace .alyce__stageCard summary {
+    cursor: pointer;
+    font-weight: 700;
+    color: var(--alyce-accent-strong);
+}
+
+#alyce_workspace .alyce__stageBody,
+#alyce_workspace .alyce__streamBody,
+#alyce_workspace .alyce__detailBody {
+    margin-top: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--alyce-ink);
+    line-height: 1.5;
+}
+
+#alyce_workspace .alyce__stageMeta,
+#alyce_workspace .alyce__streamMeta,
+#alyce_workspace .alyce__todoMeta {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--alyce-muted);
+}
+
+#alyce_workspace .alyce__finalOutput {
+    min-height: 320px;
+    margin: 0;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--alyce-line);
+    background: rgba(255, 255, 255, 0.74);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.56;
+    font-family: Consolas, "Courier New", monospace;
+}
+
+#alyce_workspace .alyce__agentStream {
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+    align-content: start;
+}
+
+#alyce_workspace .alyce__streamHeader {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+}
+
+#alyce_workspace .alyce__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.76);
+}
+
+#alyce_workspace .alyce__badge--user {
+    color: #1e5b86;
+}
+
+#alyce_workspace .alyce__badge--thinking {
+    color: var(--alyce-warning);
+}
+
+#alyce_workspace .alyce__badge--tool {
+    color: var(--alyce-accent-strong);
+}
+
+#alyce_workspace .alyce__badge--assistant {
+    color: var(--alyce-success);
+}
+
+#alyce_workspace .alyce__badge--error {
+    color: var(--alyce-danger);
+}
+
+#alyce_workspace .alyce__badge--system {
+    color: var(--alyce-muted);
+}
+
+#alyce_workspace .alyce__composer {
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(129, 64, 21, 0.14);
+    align-self: auto;
+}
+
+#alyce_workspace .alyce__composerActions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+#alyce_workspace .alyce__composerActions .menu_button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 104px;
+    min-height: 40px;
+    padding: 8px 14px;
+    white-space: nowrap;
+    word-break: keep-all;
+    line-height: 1;
+}
+
+#alyce_workspace .alyce__statusBar {
+    border: 1px solid var(--alyce-line);
+    border-radius: 14px;
+    padding: 12px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 245, 235, 0.82));
+    display: grid;
+    gap: 10px;
+    text-align: left;
+}
+
+#alyce_workspace .alyce__statusGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+#alyce_workspace .alyce__statusItem {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid rgba(129, 64, 21, 0.12);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.68);
+}
+
+#alyce_workspace .alyce__statusItemLabel {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--alyce-muted);
+}
+
+#alyce_workspace .alyce__statusItemValue {
+    color: var(--alyce-ink);
+    font-size: 13px;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+#alyce_workspace .alyce__statusCurrent {
+    display: grid;
+    gap: 4px;
+    padding-top: 2px;
+}
+
+#alyce_workspace .alyce__statusCurrentLabel {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--alyce-accent-strong);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+#alyce_workspace .alyce__statusCurrentBody {
+    color: var(--alyce-ink);
+    line-height: 1.5;
+}
+
+#alyce_workspace .alyce__todoHead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#alyce_workspace .alyce__todoState {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.84);
+    border: 1px solid rgba(129, 64, 21, 0.14);
+    color: var(--alyce-accent-strong);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+#alyce_workspace .alyce__todoItem {
+    display: grid;
+    gap: 4px;
+    text-align: left;
+}
+
+#alyce_workspace .alyce__todoItem.is-in-progress {
+    border-color: rgba(176, 108, 29, 0.32);
+}
+
+#alyce_workspace .alyce__todoItem.is-completed {
+    border-color: rgba(62, 125, 86, 0.28);
+}
+
+#alyce_workspace .alyce__todoItem.is-skipped {
+    opacity: 0.6;
+}
+
+#alyce_workspace .alyce__detailCardTitle {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--alyce-accent-strong);
+}
+
+#alyce_workspace .alyce__panel--agentMain {
+    grid-template-rows: auto 1fr auto;
+    min-height: 0;
+}
+
+#alyce_workspace .alyce__panel--agentSide {
+    align-content: start;
+    min-height: 0;
+}
+
+#alyce_workspace .alyce__view--hidden {
+    display: none;
+}
+
+@media screen and (max-width: 1100px) {
+    #alyce_workspace .alyce__hero,
+    #alyce_workspace .alyce__toolbar {
+        grid-template-columns: 1fr;
+        display: grid;
+    }
+
+    #alyce_workspace .alyce__resultGrid,
+    #alyce_workspace .alyce__agentGrid {
+        grid-template-columns: 1fr;
+    }
+
+    #alyce_workspace .alyce__editorMetaGrid,
+    #alyce_workspace .alyce__statusGrid {
+        grid-template-columns: 1fr;
+    }
+}
