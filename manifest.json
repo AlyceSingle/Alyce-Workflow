@@ -1,0 +1,12 @@
+{
+    "display_name": "Alyce 工作台",
+    "loading_order": 16,
+    "requires": [],
+    "optional": [],
+    "generate_interceptor": "alyceGenerateInterceptor",
+    "js": "index.js",
+    "css": "style.css",
+    "author": "OpenAI Codex",
+    "version": "0.1.0",
+    "homePage": "https://github.com/SillyTavern/SillyTavern"
+}
