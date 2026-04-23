@@ -4,11 +4,8 @@
       
       <div class="alyce__hero">
         <div class="alyce__heroCopy">
-          <div class="alyce__eyebrow">多阶段工作台</div>
-          <h2 class="alyce__title">复用当前连接的多阶段生成</h2>
-          <p class="alyce__subtitle">
-            勾选启用 Alyce 后，直接在当前聊天楼层发送消息即可接管本轮生成。线性模式展示固定链路，代理模式展示实时事件与继续入口。
-          </p>
+          <div class="alyce__eyebrow">多阶段工作流</div>
+          <h2 class="alyce__title">Alyce</h2>
         </div>
       </div>
 
@@ -31,13 +28,13 @@
         <section class="alyce__panel alyce__panel--rail">
           <div class="alyce__panelHeader">
             <h3>工作流轨道</h3>
-            <p>方块节点表示这一次的隐藏执行链。你可以在加号位置插入自定义环节，也可以关闭单个模块或删除自定义节点。</p>
+            <p>方块节点表示这一次的隐藏执行链。你可以按加号插入新环节，或者点击节点编辑/删除。</p>
           </div>
           <div class="alyce__rail">
             <template v-for="(step, idx) in settingsState.workflow" :key="step.id">
               <button 
                 class="alyce__insertButton" 
-                title="插入自定义环节"
+                title="插入环节"
                 @click="insertCustomStep(idx)"
               >
                 +
@@ -53,7 +50,7 @@
             </template>
             <button 
               class="alyce__insertButton" 
-              title="插入自定义环节"
+              title="插入环节"
               @click="insertCustomStep(settingsState.workflow.length)"
             >
               +
@@ -71,6 +68,17 @@
               <PromptEditor v-if="selectedStep" :step="selectedStep" @delete="deleteCustomStep" />
               <p v-else class="alyce__emptyState">当前没有选中的环节。</p>
             </div>
+            <div class="alyce__finalTemplateControl alyce__finalTemplateControl--editor">
+              <label for="alyce_final_output_template">最终输出模板</label>
+              <textarea
+                id="alyce_final_output_template"
+                data-macros-autocomplete="hide"
+                rows="3"
+                :value="settingsState.finalOutputTemplate"
+                @input="updateFinalOutputTemplate(($event.target as HTMLTextAreaElement).value)"
+              ></textarea>
+              <p>可组合多个资产宏，例如 <code v-pre>{{摘要}}</code> 与 <code v-pre>{{正文}}</code>。</p>
+            </div>
           </section>
         </div>
       </div>
@@ -79,14 +87,14 @@
         <div class="alyce__agentGrid">
           <section class="alyce__panel alyce__panel--agentMain">
             <div class="alyce__panelHeader alyce__panelHeader--left">
-              <h3>代理事件流</h3>
+              <h3>进度事件流</h3>
               <p>参考本地 AlyceAgent 的终端信息架构，实时展示事件、状态与继续入口。最终回复会直接写回聊天，而不是停留在工作台。</p>
             </div>
             
             <div class="alyce__agentStream" ref="streamContainer">
               <div v-if="!runState.events.length" class="alyce__emptyCard">
-                <strong>还没有代理事件</strong>
-                <p>先在聊天楼层发送一条消息，或在下方输入补充指令。事件会按执行顺序持续追加在这里。</p>
+                <strong>还没有进度事件</strong>
+              <p>先在聊天楼层发送一条消息，或在下方输入内容。事件会按执行顺序持续追加在这里。</p>
               </div>
               <article v-else v-for="(event, i) in runState.events" :key="i" class="alyce__streamItem">
                 <div class="alyce__streamHeader">
@@ -100,30 +108,29 @@
             </div>
 
             <div class="alyce__composer">
-              <label class="alyce__composerLabel" for="alyce_agent_input">补充指令 / 继续</label>
-              <textarea 
-                id="alyce_agent_input" 
-                data-macros-autocomplete="hide" 
+              <label class="alyce__composerLabel" for="alyce_agent_input">发送给 AI</label>
+              <textarea
+                id="alyce_agent_input"
+                data-macros-autocomplete="hide"
                 rows="4"
                 v-model="agentInput"
               ></textarea>
               <div class="alyce__composerActions">
-                <button class="menu_button" @click="handleAgentSend">发送补充</button>
-                <button class="menu_button" @click="handleAgentContinue">继续</button>
+                <button class="menu_button" @click="handleAgentSend">发送</button>
               </div>
             </div>
           </section>
 
           <section class="alyce__panel alyce__panel--agentSide">
             <div class="alyce__panelHeader alyce__panelHeader--left">
-              <h3>代理侧栏</h3>
+              <h3>进度侧栏</h3>
               <p>状态栏、任务清单，以及当前最新工作内容。</p>
             </div>
             
             <div class="alyce__statusBar">
               <div class="alyce__statusGrid">
                 <div class="alyce__statusItem"><div class="alyce__statusItemLabel">接管</div><div class="alyce__statusItemValue">{{ settingsState.enabled ? '开启' : '关闭' }}</div></div>
-                <div class="alyce__statusItem"><div class="alyce__statusItemLabel">模式</div><div class="alyce__statusItemValue">{{ runState.modeUsed === 'agent' || settingsState.mode === 'agent' ? '代理模式' : '线性模式' }}</div></div>
+                <div class="alyce__statusItem"><div class="alyce__statusItemLabel">模式</div><div class="alyce__statusItemValue">{{ runState.modeUsed === 'agent' || settingsState.mode === 'agent' ? '进度' : '工作流' }}</div></div>
                 <div class="alyce__statusItem"><div class="alyce__statusItemLabel">任务</div><div class="alyce__statusItemValue">{{ completedTasks }}/{{ totalTasks }}</div></div>
                 <div class="alyce__statusItem"><div class="alyce__statusItemLabel">接口</div><div class="alyce__statusItemValue">{{ connectionSnapshot.api }}</div></div>
                 <div class="alyce__statusItem"><div class="alyce__statusItemLabel">来源</div><div class="alyce__statusItemValue">{{ connectionSnapshot.source }}</div></div>
@@ -167,19 +174,18 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
-import { settingsState, saveSettings, DEFAULT_CUSTOM_PROMPT, DEFAULT_STATUS, ENABLED_IDLE_STATUS, getRevisionRounds } from './store/settings';
-import { runState, runAlyceTurn, runAgentFollowup } from './composables/useWorkflow';
+import { settingsState, saveSettings, DEFAULT_FINAL_OUTPUT_TEMPLATE, DEFAULT_STATUS, ENABLED_IDLE_STATUS, createCustomStep } from './store/settings';
+import { runState, runAlyceTurn } from './composables/useWorkflow';
 import { getConnectionSnapshot, getToolCallingSnapshot, shorten } from './composables/useSillyTavern';
 import WorkflowStep from './components/WorkflowStep.vue';
 import PromptEditor from './components/PromptEditor.vue';
 import SettingsToggle from './components/SettingsToggle.vue';
-import { getContext } from 'st-context';
 import { Popup, POPUP_TYPE } from 'st-popup';
 
 const connectionSnapshot = computed(() => getConnectionSnapshot());
 const toolCallingSnapshot = computed(() => getToolCallingSnapshot());
 
-const selectedStepId = ref(settingsState.workflow[0]?.id || 'think');
+const selectedStepId = ref<string | null>(settingsState.workflow[0]?.id || null);
 const selectedStep = computed(() => settingsState.workflow.find(s => s.id === selectedStepId.value));
 
 const isRunning = computed(() => runState.statusKind === 'running');
@@ -201,19 +207,9 @@ watch(() => runState.events.length, () => {
 });
 
 function insertCustomStep(index: number) {
-  const maxIdx = settingsState.workflow.findIndex(s => s.type === 'final');
-  const safeIdx = maxIdx >= 0 ? Math.min(index, maxIdx) : Math.min(index, settingsState.workflow.length);
-  
-  const context = getContext();
-  const idStr = typeof context.uuidv4 === 'function' ? context.uuidv4() as string : `alyce-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  
-  const step: any = {
-    id: idStr,
-    type: 'custom',
-    title: '自定义环节',
-    prompt: DEFAULT_CUSTOM_PROMPT,
-    enabled: true,
-  };
+  const safeIdx = Math.min(index, settingsState.workflow.length);
+  const step = createCustomStep();
+  step.description = '';
   settingsState.workflow.splice(safeIdx, 0, step);
   selectedStepId.value = step.id;
   saveSettings();
@@ -221,9 +217,13 @@ function insertCustomStep(index: number) {
 
 function deleteCustomStep(id: string) {
   const target = settingsState.workflow.find(s => s.id === id);
-  if (!target || target.type !== 'custom') return;
+  if (!target) return;
   settingsState.workflow = settingsState.workflow.filter(s => s.id !== target.id);
-  selectedStepId.value = settingsState.workflow[0]?.id || 'think';
+  if (settingsState.workflow.length > 0) {
+    selectedStepId.value = settingsState.workflow[0].id;
+  } else {
+    selectedStepId.value = null;
+  }
   saveSettings();
 }
 
@@ -242,20 +242,28 @@ function getTodoStatusLabel(step: any) {
 }
 
 function getTodoMeta(step: any) {
-  if (step.type === 'revise') return `${getRevisionRounds(step)} 轮整改`;
-  const types: Record<string, string> = { think: '思考', outline: '分析', draft: '初稿', final: '终稿' };
-  return types[step.type] || '扩展';
+  const assetName = step.outputVarName || step.title;
+  if (step.isEditTool === true) {
+    return `增量编辑 {{${assetName}}}`;
+  }
+  if (assetName) return `输出 {{${assetName}}}`;
+  if (step.rounds && step.rounds > 1) return `${step.rounds} 轮循环`;
+  return step.description || '环节';
 }
 
 async function handleAgentSend() {
-  await runAgentFollowup(agentInput.value);
+  const prompt = agentInput.value.trim();
+  if (!prompt) {
+    toastr.warning('请输入要发送给 AI 的内容。');
+    return;
+  }
+  await runAlyceTurn(prompt, 'agent');
   agentInput.value = '';
 }
 
-async function handleAgentContinue() {
-  const prompt = agentInput.value.trim() || '继续';
-  agentInput.value = '';
-  await runAlyceTurn(prompt, 'agent');
+function updateFinalOutputTemplate(template: string) {
+  settingsState.finalOutputTemplate = template.trim().length > 0 ? template : DEFAULT_FINAL_OUTPUT_TEMPLATE;
+  saveSettings();
 }
 
 function zoomEvent(event: any) {

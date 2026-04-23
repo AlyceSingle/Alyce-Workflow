@@ -7,7 +7,10 @@
 ```text
 Alyce-Workflow/
 ├── docs/                       # 项目文档
-│   └── PROJECT_STRUCTURE.md    # 本文档
+│   ├── PROJECT_STRUCTURE.md    # 本文档
+│   ├── PROPOSED_WORKFLOW_ARCHITECTURE.md      # 黑板资产与变量命名方案
+│   ├── IMPLEMENTATION_PLAN_INCREMENTAL_EDIT.md # 增量编辑实装计划
+│   └── FileEditTool/           # 增量编辑逻辑参考实现（文档参考，不参与运行时打包）
 ├── src/                        # 源代码目录（开发核心）
 │   ├── main.ts                 # 插件入口：负责与 SillyTavern 握手并挂载 Vue 实例
 │   ├── App.vue                 # 根组件：插件的主界面布局
@@ -17,12 +20,12 @@ Alyce-Workflow/
 │   │   └── SettingsToggle.vue  # 开关/配置项组件
 │   ├── composables/            # 逻辑封装 (Composition API)
 │   │   ├── useSillyTavern.ts   # 封装 ST 原生 API 调用
-│   │   └── useWorkflow.ts      # 核心工作流逻辑（原 index.js 的灵魂）
+│   │   └── useWorkflow.ts      # 核心工作流逻辑、黑板资产保存、最终输出模板与增量编辑引擎
 │   ├── store/                  # 状态管理
 │   │   └── settings.ts         # 响应式插件设置，自动同步至 extension_settings
 │   ├── types/                  # 类型定义
 │   │   ├── sillytavern.d.ts    # ST 内部模块的 TS 类型声明
-│   │   └── workflow.d.ts       # 工作流业务数据结构定义
+│   │   └── workflow.d.ts       # 工作流业务数据结构定义（含 outputVarName / isEditTool）
 │   └── assets/                 # 静态资源
 │       └── style.scss          # 全局样式源文件
 ├── manifest.json               # SillyTavern 插件元数据（指向根目录 index.js）
@@ -48,11 +51,37 @@ Alyce-Workflow/
 ### 2.3 类型安全 (Type Safety)
 通过在 `src/types/` 中定义 SillyTavern 的 API 类型，开发者可以享受完整的代码补全和静态检查，极大地降低了因拼写错误或参数误用导致的 Bug。
 
+### 2.4 黑板资产与增量编辑 (Blackboard Assets)
+工作流运行期间会维护内存级 `scratch.outputs` 黑板。每个环节可以通过 `outputVarName` 设置语义化输出变量名，例如 `article` 或 `thought`，后续提示词可通过 `{{article}}` 引用最新内容。未设置变量名时会使用环节标题作为资产名，避免暴露步骤 UUID。
+
+最终写回聊天的内容不再固定为最后一次环节输出，而是由全局 `finalOutputTemplate` 决定。默认模板为 `{{previous_output}}`，保持旧行为；用户也可以组合多个资产宏，例如：
+
+```text
+{{summary}}
+
+{{article}}
+```
+
+当环节启用 `isEditTool` 后，模型输出会被视为增量编辑指令，而不是直接保存为全文。当前支持格式：
+
+```text
+[EDIT: article]
+OLD: 需要替换的旧内容
+NEW: 替换后的新内容
+[/EDIT]
+```
+
+编辑引擎位于 `src/composables/useWorkflow.ts`，会校验目标资产是否存在、`OLD` 是否命中、`OLD/NEW` 是否相同，以及多处命中是否需要 `replace_all=true`。成功后会直接覆盖对应 `scratch.outputs[varName]`，实现“活文档”式资产更新。
+
+编辑环节运行时会自动在原提示词模板顶部注入 EDIT 工具说明，告知模型只输出 EDIT 块、如何填写 `OLD` / `NEW`、如何使用 `replace_all=true`，并列出当前可编辑资产名。
+
 ## 3. 开发指南
 
 - **修改 UI**：前往 `src/components/` 或 `src/App.vue`。
 - **修改逻辑**：前往 `src/composables/useWorkflow.ts`。
 - **添加新设置**：在 `src/store/settings.ts` 中添加新的响应式属性。
+- **配置资产输出**：在 `PromptEditor.vue` 中维护输出变量名与增量编辑开关。
+- **配置最终回复**：在环节编辑器下方的最终输出模板中组合资产宏。
 - **执行构建**：运行 `npm run build` 以更新根目录的产物。
 
 ---

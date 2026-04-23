@@ -1,9 +1,39 @@
 import { reactive } from 'vue';
 import { getContext } from 'st-context';
 import { sendMessageAsUser, saveReply } from 'st-script';
-import { settingsState, saveSettings, getRevisionRounds } from '../store/settings';
-import { getToolCallingSnapshot, shorten } from './useSillyTavern';
-import type { RunState, ScratchData, WorkflowStep, StepType } from '../types/workflow';
+import { normalizeOutputVarName, settingsState } from '../store/settings';
+import { getToolCallingSnapshot } from './useSillyTavern';
+import type { RunState, ScratchData, WorkflowStep } from '../types/workflow';
+
+interface AssetEditInstruction {
+    varName: string;
+    oldString: string;
+    newString: string;
+    replaceAll: boolean;
+}
+
+interface AssetEditResult {
+    outputs: Record<string, string>;
+    lastOutput: string;
+    editedVarNames: string[];
+    appliedCount: number;
+    matchCount: number;
+}
+
+const EDIT_TOOL_PROMPT_PREFIX = `你正在使用 Alyce 的内存资产增量编辑工具。
+本环节不要重写全文，只返回一个或多个 EDIT 块。
+
+格式：
+[EDIT: asset_name]
+OLD: 从目标资产中逐字复制需要替换的旧内容
+NEW: 替换后的新内容
+[/EDIT]
+
+规则：
+- asset_name 必须是当前已有资产名。
+- OLD 必须能在目标资产中精确命中。
+- 默认只替换一处；如果要替换全部相同内容，使用 [EDIT: asset_name replace_all=true]。
+- 不要输出解释、总结、Markdown 代码围栏或修改后的全文。`;
 
 export const runState = reactive<RunState>({
     isRunning: false,
@@ -49,9 +79,7 @@ export function setStepStatus(stepId: string, status: string) {
 
 export function syncRunArtifacts(scratch: ScratchData) {
     runState.lastScratch = structuredClone(scratch);
-    if (scratch.final) {
-        runState.finalOutput = scratch.final;
-    }
+    runState.finalOutput = scratch.lastOutput;
 }
 
 export function resetRunState(modeUsed: 'linear' | 'agent', inputText: string) {
@@ -76,18 +104,182 @@ export function resetRunState(modeUsed: 'linear' | 'agent', inputText: string) {
 export function buildInterpolationMap(step: WorkflowStep, scratch: ScratchData, extra: any = {}) {
     return {
         input: scratch.input,
-        thinking: scratch.thinking,
-        outline: scratch.outline,
-        draft: scratch.draft,
-        current_draft: scratch.currentDraft,
-        revision_count: String(extra.revisionCount ?? (step.type === 'revise' ? getRevisionRounds(step) : 0)),
+        previous_output: scratch.lastOutput,
+        last_output: scratch.lastOutput,
+        revision_count: String(extra.revisionCount ?? 0),
         revision_index: String(extra.revisionIndex ?? ''),
         step_title: step.title,
+        ...scratch.outputs
     };
 }
 
 export function interpolateTemplate(template: string, values: Record<string, string>) {
-    return String(template ?? '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => String(values[key] ?? ''));
+    return String(template ?? '').replace(/\{\{\s*([^{}\r\n]+?)\s*\}\}/g, (_, key) => String(values[String(key).trim()] ?? ''));
+}
+
+export function getStepOutputVarName(step: WorkflowStep) {
+    const customName = normalizeOutputVarName(step.outputVarName);
+    if (customName) {
+        return customName;
+    }
+    return normalizeOutputVarName(step.title) || step.id;
+}
+
+function countMatches(content: string, needle: string) {
+    if (!needle) {
+        return 0;
+    }
+    return content.split(needle).length - 1;
+}
+
+function unwrapEditSection(text: string) {
+    let normalized = text;
+    if (normalized.startsWith('\r\n')) {
+        normalized = normalized.slice(2);
+    } else if (normalized.startsWith('\n')) {
+        normalized = normalized.slice(1);
+    }
+
+    if (normalized.endsWith('\r\n')) {
+        normalized = normalized.slice(0, -2);
+    } else if (normalized.endsWith('\n')) {
+        normalized = normalized.slice(0, -1);
+    }
+
+    return normalized;
+}
+
+function parseOldNewSections(varName: string, body: string) {
+    const oldLabel = /(?:^|\r?\n)OLD:[ \t]*/.exec(body);
+    if (!oldLabel) {
+        throw new Error(`[EDIT: ${varName}] 缺少 OLD: 区块。`);
+    }
+
+    const oldStart = oldLabel.index + oldLabel[0].length;
+    const afterOldLabel = body.slice(oldStart);
+    const newLabel = /\r?\nNEW:[ \t]*/.exec(afterOldLabel);
+    if (!newLabel) {
+        throw new Error(`[EDIT: ${varName}] 缺少 NEW: 区块。`);
+    }
+
+    return {
+        oldString: unwrapEditSection(afterOldLabel.slice(0, newLabel.index)),
+        newString: unwrapEditSection(afterOldLabel.slice(newLabel.index + newLabel[0].length)),
+    };
+}
+
+function parseAssetEditInstructions(response: string): AssetEditInstruction[] {
+    const instructions: AssetEditInstruction[] = [];
+    const editBlockPattern = /\[EDIT:\s*([^\]\r\n]+?)\]([\s\S]*?)\[\/EDIT\]/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = editBlockPattern.exec(response)) !== null) {
+        const [, header, body] = match;
+        const replaceAll = /\breplace_all\s*=\s*true\b/i.test(header)
+            || /\breplaceAll\s*=\s*true\b/i.test(header);
+        const varName = normalizeOutputVarName(header
+            .replace(/\breplace_all\s*=\s*true\b/ig, '')
+            .replace(/\breplaceAll\s*=\s*true\b/ig, ''));
+        if (!varName) {
+            throw new Error('EDIT 指令缺少有效资产名。');
+        }
+        const { oldString, newString } = parseOldNewSections(varName, body);
+        instructions.push({ varName, oldString, newString, replaceAll });
+    }
+
+    return instructions;
+}
+
+export function applyAssetEdit(response: string, scratch: ScratchData, fallbackVarName = ''): AssetEditResult {
+    const instructions = parseAssetEditInstructions(response);
+    if (instructions.length === 0) {
+        throw new Error('增量编辑模式未找到 [EDIT: 变量名] OLD/NEW [/EDIT] 指令。');
+    }
+
+    const outputs = { ...scratch.outputs };
+    const editedVarNames: string[] = [];
+    let appliedCount = 0;
+    let totalMatches = 0;
+
+    for (const instruction of instructions) {
+        const currentValue = outputs[instruction.varName];
+        if (typeof currentValue !== 'string') {
+            throw new Error(`[EDIT: ${instruction.varName}] 找不到可编辑资产。请先在前置环节输出 {{${instruction.varName}}}。`);
+        }
+        if (instruction.oldString === instruction.newString) {
+            throw new Error(`[EDIT: ${instruction.varName}] OLD 与 NEW 完全相同，没有可应用的修改。`);
+        }
+
+        const matchCount = countMatches(currentValue, instruction.oldString);
+        if (matchCount === 0) {
+            throw new Error(`[EDIT: ${instruction.varName}] OLD 内容未在当前资产中找到。`);
+        }
+        if (matchCount > 1 && !instruction.replaceAll) {
+            throw new Error(`[EDIT: ${instruction.varName}] 找到 ${matchCount} 处 OLD 内容。请提供更精确上下文，或在头部使用 replace_all=true。`);
+        }
+
+        outputs[instruction.varName] = instruction.replaceAll
+            ? currentValue.split(instruction.oldString).join(instruction.newString)
+            : currentValue.replace(instruction.oldString, instruction.newString);
+        editedVarNames.push(instruction.varName);
+        appliedCount += instruction.replaceAll ? matchCount : 1;
+        totalMatches += matchCount;
+    }
+
+    const preferredVarName = fallbackVarName && editedVarNames.includes(fallbackVarName)
+        ? fallbackVarName
+        : editedVarNames.at(-1) || fallbackVarName;
+
+    return {
+        outputs,
+        lastOutput: preferredVarName ? outputs[preferredVarName] ?? '' : '',
+        editedVarNames: [...new Set(editedVarNames)],
+        appliedCount,
+        matchCount: totalMatches,
+    };
+}
+
+function saveStepOutput(step: WorkflowStep, scratch: ScratchData, output: string) {
+    const varName = getStepOutputVarName(step);
+    scratch.outputs[varName] = output;
+    scratch.lastOutput = output;
+    return varName;
+}
+
+function getEditToolPromptPrefix(_step: WorkflowStep, scratch: ScratchData) {
+    const assetNames = Object.keys(scratch.outputs);
+    const availableAssets = assetNames.length > 0
+        ? assetNames.map(name => `- ${name}`).join('\n')
+        : '当前还没有资产';
+    return `${EDIT_TOOL_PROMPT_PREFIX}
+
+当前可编辑资产：
+${availableAssets}`;
+}
+
+function buildStepPromptTemplate(step: WorkflowStep, scratch: ScratchData) {
+    if (step.isEditTool !== true) {
+        return step.prompt;
+    }
+    return `${getEditToolPromptPrefix(step, scratch)}
+
+${step.prompt}`;
+}
+
+function buildFinalInterpolationMap(scratch: ScratchData) {
+    return {
+        input: scratch.input,
+        previous_output: scratch.lastOutput,
+        last_output: scratch.lastOutput,
+        ...scratch.outputs,
+    };
+}
+
+export function resolveFinalOutput(scratch: ScratchData) {
+    const template = settingsState.finalOutputTemplate?.trim()
+        ? settingsState.finalOutputTemplate
+        : '{{previous_output}}';
+    return interpolateTemplate(template, buildFinalInterpolationMap(scratch)).trim();
 }
 
 async function tick() {
@@ -96,7 +288,8 @@ async function tick() {
 
 export async function runQuietStage(step: WorkflowStep, scratch: ScratchData, options = {}) {
     const context = getContext();
-    const prompt = interpolateTemplate(step.prompt, buildInterpolationMap(step, scratch, options));
+    const promptTemplate = buildStepPromptTemplate(step, scratch);
+    const prompt = interpolateTemplate(promptTemplate, buildInterpolationMap(step, scratch, options));
     const result = await context.generateQuietPrompt({ 
         quietPrompt: prompt,
         quietToLoud: true, 
@@ -134,10 +327,12 @@ export async function finalizeAssistantOutput(output: string, modeUsed: 'linear'
             mode: modeUsed,
             enabled: settingsState.enabled,
             workflow: settingsState.workflow.map(step => ({
-                type: step.type,
                 title: step.title,
-                rounds: step.type === 'revise' ? getRevisionRounds(step) : undefined,
+                rounds: step.rounds,
+                outputVarName: step.outputVarName || undefined,
+                isEditTool: step.isEditTool === true,
             })),
+            finalOutputTemplate: settingsState.finalOutputTemplate,
             generatedAt: new Date().toISOString(),
         };
     }
@@ -176,11 +371,8 @@ export async function runAlyceTurn(inputText: string, modeUsed: 'linear' | 'agen
 
     const scratch: ScratchData = {
         input: trimmedInput,
-        thinking: '',
-        outline: '',
-        draft: '',
-        currentDraft: '',
-        final: '',
+        outputs: {},
+        lastOutput: '',
     };
 
     try {
@@ -205,42 +397,30 @@ export async function runAlyceTurn(inputText: string, modeUsed: 'linear' | 'agen
             runState.status = `正在执行${step.title}...`;
             await tick();
 
-            if (step.type === 'think') {
-                scratch.thinking = await runQuietStage(step, scratch);
-                addStageOutput(step.title, scratch.thinking, '内部工作笔记');
-                pushEvent('thinking', step.title, scratch.thinking, '隐藏思考阶段已完成。');
-            } else if (step.type === 'outline') {
-                scratch.outline = await runQuietStage(step, scratch);
-                addStageOutput(step.title, scratch.outline, '粗略大纲');
-                pushEvent('thinking', step.title, scratch.outline, '结构分析已完成。');
-            } else if (step.type === 'draft') {
-                scratch.draft = await runQuietStage(step, scratch);
-                scratch.currentDraft = scratch.draft;
-                addStageOutput(step.title, scratch.draft, '第一版初稿');
-                pushEvent('assistant', step.title, scratch.draft, '第一版工作初稿已生成。');
-            } else if (step.type === 'revise') {
-                const revisionRounds = getRevisionRounds(step);
-                if (revisionRounds === 0) {
-                    addStageOutput(step.title, '整改轮数为 0，当前环节已跳过。', '已跳过');
-                    pushEvent('tool', step.title, '整改轮数当前为 0。', '未执行整改循环。');
+            const rounds = step.rounds && step.rounds > 1 ? step.rounds : 1;
+
+            for (let index = 1; index <= rounds; index++) {
+                const rawOutput = await runQuietStage(step, scratch, { revisionIndex: index, revisionCount: rounds });
+                let output = rawOutput;
+                let meta = step.description || '已完成';
+
+                if (step.isEditTool === true) {
+                    const editResult = applyAssetEdit(rawOutput, scratch, getStepOutputVarName(step));
+                    scratch.outputs = editResult.outputs;
+                    scratch.lastOutput = editResult.lastOutput;
+
+                    output = scratch.lastOutput;
+                    meta = `${meta} · 已应用 ${editResult.appliedCount} 处编辑：${editResult.editedVarNames.map(name => `{{${name}}}`).join('、')}`;
+                    pushEvent('tool', '增量编辑已应用', rawOutput, `匹配 ${editResult.matchCount} 处，更新 ${editResult.editedVarNames.join(', ')}`);
                 } else {
-                    for (let index = 1; index <= revisionRounds; index++) {
-                        const revised = await runQuietStage(step, scratch, { revisionIndex: index, revisionCount: revisionRounds });
-                        scratch.currentDraft = revised;
-                        addStageOutput(`${step.title} ${index}/${revisionRounds}`, revised, '整改回合');
-                        pushEvent('tool', `${step.title} ${index}/${revisionRounds}`, revised, `第 ${index} / ${revisionRounds} 轮整改。`);
-                        await tick();
-                    }
+                    const outputVarName = saveStepOutput(step, scratch, rawOutput);
+                    meta = step.description || `已保存为 {{${outputVarName}}}`;
                 }
-            } else if (step.type === 'final') {
-                scratch.final = await runQuietStage(step, scratch);
-                addStageOutput(step.title, scratch.final, '终稿封装');
-                pushEvent('assistant', step.title, scratch.final, '最终答案已准备完成。');
-            } else {
-                const transformed = await runQuietStage(step, scratch);
-                scratch.currentDraft = transformed;
-                addStageOutput(step.title, transformed, '自定义处理');
-                pushEvent('tool', step.title, transformed, '自定义环节已完成。');
+
+                const phaseTitle = rounds > 1 ? `${step.title} ${index}/${rounds}` : step.title;
+                addStageOutput(phaseTitle, output, meta);
+                pushEvent('thinking', phaseTitle, output, meta || '该环节已执行。');
+                await tick();
             }
 
             syncRunArtifacts(scratch);
@@ -249,7 +429,7 @@ export async function runAlyceTurn(inputText: string, modeUsed: 'linear' | 'agen
         }
 
         runState.currentStepId = null;
-        const finalOutput = scratch.final || scratch.currentDraft || scratch.draft || '';
+        const finalOutput = resolveFinalOutput(scratch);
         if (!String(finalOutput).trim()) {
             throw new Error('Alyce 生成了空的最终结果。');
         }

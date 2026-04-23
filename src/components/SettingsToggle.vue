@@ -1,29 +1,29 @@
 <template>
   <div class="alyce__toolbar">
     <label class="alyce__toggle alyce__toggle--strong">
-      <input 
-        type="checkbox" 
+      <input
+        type="checkbox"
         :checked="settingsState.enabled"
         @change="updateEnabled(($event.target as HTMLInputElement).checked)"
       >
       <span>启用 Alyce</span>
     </label>
     <div class="alyce__modeTabs">
-      <button 
-        class="menu_button alyce__modeTab" 
+      <button
+        class="menu_button alyce__modeTab"
         :class="{ 'is-active': settingsState.mode === 'linear' }"
         @click="updateMode('linear')"
-        title="线性模式"
+        title="工作流"
       >
-        线性
+        工作流
       </button>
-      <button 
-        class="menu_button alyce__modeTab" 
+      <button
+        class="menu_button alyce__modeTab"
         :class="{ 'is-active': settingsState.mode === 'agent' }"
         @click="updateMode('agent')"
-        title="代理模式"
+        title="进度"
       >
-        代理
+        进度
       </button>
     </div>
   </div>

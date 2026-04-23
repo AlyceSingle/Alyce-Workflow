@@ -54,15 +54,24 @@ declare module 'st-kai' {
     export const kai_settings: any;
 }
 
-declare global {
-    var alyceGenerateInterceptor: (chat: any[], contextSize: number, abort: (val: boolean) => void, type: string) => Promise<void>;
-    var alyceDeleteCustomStep: (stepId: string) => void;
-    var toastr: {
-        info(msg: string): void;
-        warning(msg: string): void;
-        success(msg: string): void;
-        error(msg: string): void;
-    };
+declare module '*.vue' {
+    import type { DefineComponent } from 'vue';
+    const component: DefineComponent<Record<string, never>, Record<string, never>, any>;
+    export default component;
 }
 
-export {};
+declare const $: any;
+declare const jQuery: any;
+
+declare var alyceGenerateInterceptor: (chat: any[], contextSize: number, abort: (val: boolean) => void, type: string) => Promise<void>;
+declare var alyceDeleteCustomStep: (stepId: string) => void;
+declare var toastr: {
+    info(msg: string): void;
+    warning(msg: string): void;
+    success(msg: string): void;
+    error(msg: string): void;
+};
+
+interface Window {
+    alyceDeleteCustomStep: (stepId: string) => void;
+}

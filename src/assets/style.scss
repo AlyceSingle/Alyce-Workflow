@@ -148,6 +148,51 @@
     padding: 8px 12px;
 }
 
+#alyce_workspace .alyce__finalTemplateControl {
+    display: grid;
+    flex: 1 1 420px;
+    max-width: 720px;
+    gap: 4px;
+    text-align: left;
+}
+
+#alyce_workspace .alyce__finalTemplateControl--editor {
+    max-width: none;
+    width: 100%;
+    flex: none;
+    padding: 12px;
+    border: 1px solid var(--alyce-line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.58);
+}
+
+#alyce_workspace .alyce__finalTemplateControl label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--alyce-accent-strong);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+#alyce_workspace .alyce__finalTemplateControl textarea {
+    width: 100%;
+    min-width: 0;
+    border-radius: 12px;
+    border: 1px solid rgba(129, 64, 21, 0.18);
+    background: rgba(255, 255, 255, 0.72);
+    padding: 8px 10px;
+    color: var(--alyce-ink);
+    line-height: 1.4;
+    resize: vertical;
+}
+
+#alyce_workspace .alyce__finalTemplateControl p {
+    margin: 0;
+    color: var(--alyce-muted);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
 #alyce_workspace .alyce__modeTabs {
     display: flex;
     gap: 4px;
@@ -356,8 +401,9 @@
 
 #alyce_workspace .alyce__nodeTitle {
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 800;
     line-height: 1.05;
+    color: #1e160d;
 }
 
 #alyce_workspace .alyce__nodeMeta {
@@ -380,6 +426,7 @@
     font-size: 14px;
     line-height: 1;
     box-shadow: 0 8px 16px rgba(161, 58, 50, 0.12);
+    z-index: 2;
 }
 
 #alyce_workspace .alyce__nodeDelete:hover {
@@ -702,6 +749,16 @@
     white-space: nowrap;
     word-break: keep-all;
     line-height: 1;
+    border-color: rgba(115, 57, 26, 0.88);
+    background: linear-gradient(135deg, #9f663c, #73391a);
+    color: #fff7ef;
+    font-weight: 800;
+    box-shadow: 0 10px 20px rgba(115, 57, 26, 0.2);
+}
+
+#alyce_workspace .alyce__composerActions .menu_button:hover {
+    background: linear-gradient(135deg, #8e5730, #5f2e14);
+    border-color: rgba(95, 46, 20, 0.92);
 }
 
 #alyce_workspace .alyce__statusBar {

@@ -1,17 +1,18 @@
-export type StepType = 'think' | 'outline' | 'draft' | 'revise' | 'final' | 'custom';
-
 export interface WorkflowStep {
     id: string;
-    type: StepType;
     title: string;
+    description: string;
     prompt: string;
-    enabled?: boolean;
-    rounds?: number;
+    enabled: boolean;
+    rounds: number;
+    outputVarName?: string;
+    isEditTool?: boolean;
 }
 
 export interface AlyceSettings {
     enabled: boolean;
     mode: 'linear' | 'agent';
+    finalOutputTemplate: string;
     workflow: WorkflowStep[];
 }
 
@@ -46,11 +47,8 @@ export interface RunState {
 
 export interface ScratchData {
     input: string;
-    thinking: string;
-    outline: string;
-    draft: string;
-    currentDraft: string;
-    final: string;
+    outputs: Record<string, string>;
+    lastOutput: string;
 }
 
 export interface UiState {
