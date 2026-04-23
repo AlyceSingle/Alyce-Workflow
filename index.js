@@ -7210,9 +7210,9 @@ const _sfc_main$2 = /* @__PURE__ */ defineComponent({
                 checked: __props.step.isEditTool === true,
                 onChange: _cache[5] || (_cache[5] = ($event) => updateIsEditTool($event.target.checked))
               }, null, 40, _hoisted_19$1),
-              _cache[16] || (_cache[16] = createBaseVNode("span", null, "启用增量编辑", -1))
+              _cache[16] || (_cache[16] = createBaseVNode("span", null, "启用编辑工具", -1))
             ]),
-            _cache[17] || (_cache[17] = createBaseVNode("p", { class: "alyce__note" }, "开启后，运行时会自动在模板顶部注入 EDIT 工具说明。", -1))
+            _cache[17] || (_cache[17] = createBaseVNode("p", { class: "alyce__note" }, "开启后，运行时会自动在模板顶部注入 EDIT 工具说明，并让 AI 可以调用编辑工具。", -1))
           ])
         ]),
         createBaseVNode("div", _hoisted_20$1, [

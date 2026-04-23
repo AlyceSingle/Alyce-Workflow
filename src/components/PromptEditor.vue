@@ -78,9 +78,9 @@
           :checked="step.isEditTool === true"
           @change="updateIsEditTool(($event.target as HTMLInputElement).checked)"
         >
-        <span>启用增量编辑</span>
+        <span>启用编辑工具</span>
       </label>
-      <p class="alyce__note">开启后，运行时会自动在模板顶部注入 EDIT 工具说明。</p>
+      <p class="alyce__note">开启后，运行时会自动在模板顶部注入 EDIT 工具说明，并让 AI 可以调用编辑工具。</p>
     </div>
   </div>
 
