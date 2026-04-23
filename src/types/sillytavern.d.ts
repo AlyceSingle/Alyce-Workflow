@@ -33,7 +33,7 @@ declare module 'st-context' {
         characterId?: number;
         chat: any[];
         saveSettingsDebounced(): void;
-        generateQuietPrompt(options: { quietPrompt: string }): Promise<string>;
+        generateQuietPrompt(options: { quietPrompt: string, quietToLoud?: boolean, skipWIAN?: boolean }): Promise<string>;
         saveChat(): Promise<void>;
     };
 }

@@ -5,22 +5,10 @@ import type { AlyceSettings, WorkflowStep, StepType } from '../types/workflow';
 
 export const MODULE_NAME = 'alyce';
 export const BUILTIN_STEP_TYPES: StepType[] = ['think', 'outline', 'draft', 'revise', 'final'];
-export const DEFAULT_CHAIN_PRESET = [
-    '1. 先明确用户目标、限制条件和期望输出。',
-    '2. 先判断最合适的回答结构，再进入写作。',
-    '3. 标记缺失信息、关键假设和潜在风险。',
-    '4. 先写结构化初稿，不急着润色。',
-    '5. 输出前再做一轮补漏、压缩和校正。',
-].join('\n');
-
-const LEGACY_CHAIN_PRESET_HINT = 'Clarify the exact user goal and constraints.';
 
 export const DEFAULT_THINK_PROMPT = `你是 Alyce 的隐藏“思考”阶段。
-请按照预设思维链生成简洁的内部工作笔记。
+生成简洁的内部工作笔记。
 现在不要直接回答用户。
-
-预设思维链：
-{{thinking_chain}}
 
 用户请求：
 {{input}}
@@ -181,7 +169,6 @@ export function normalizeSettings(raw: any): AlyceSettings {
     const defaults = {
         enabled: false,
         mode: 'linear' as const,
-        chainPreset: DEFAULT_CHAIN_PRESET,
         workflow: createDefaultWorkflow(),
     };
 
@@ -194,13 +181,8 @@ export function normalizeSettings(raw: any): AlyceSettings {
     const normalized: AlyceSettings = {
         enabled: Boolean(raw.enabled),
         mode,
-        chainPreset: typeof raw.chainPreset === 'string' && raw.chainPreset.trim().length > 0 ? raw.chainPreset : defaults.chainPreset,
         workflow,
     };
-
-    if (normalized.chainPreset.includes(LEGACY_CHAIN_PRESET_HINT)) {
-        normalized.chainPreset = defaults.chainPreset;
-    }
 
     return normalized;
 }

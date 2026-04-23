@@ -92,8 +92,9 @@
                 <div class="alyce__streamHeader">
                   <span class="alyce__badge" :class="`alyce__badge--${event.kind}`">{{ event.badge }}</span>
                   <strong>{{ event.title }}</strong>
+                  <button class="alyce__zoomBtn" @click="zoomEvent(event)" title="放大查看" style="margin-left: auto; cursor: pointer; background: none; border: none; color: inherit; opacity: 0.7;"><i class="fa-solid fa-magnifying-glass"></i></button>
                 </div>
-                <div v-if="event.body" class="alyce__streamBody">{{ event.body }}</div>
+                <div v-if="event.body" class="alyce__streamBody">{{ shorten(event.body, 1000) }}</div>
                 <div v-if="event.meta" class="alyce__streamMeta">{{ event.meta }}</div>
               </article>
             </div>
@@ -152,10 +153,6 @@
                 <div class="alyce__detailBody">{{ shorten(toolCallingSnapshot.note, 500) }}</div>
               </div>
               <div class="alyce__detailCard">
-                <div class="alyce__detailCardTitle">当前工作稿</div>
-                <div class="alyce__detailBody">{{ runState.lastScratch?.currentDraft || '当前还没有工作稿。' }}</div>
-              </div>
-              <div class="alyce__detailCard">
                 <div class="alyce__detailCardTitle">当前状态</div>
                 <div class="alyce__detailBody">{{ currentStatus }}</div>
               </div>
@@ -177,6 +174,7 @@ import WorkflowStep from './components/WorkflowStep.vue';
 import PromptEditor from './components/PromptEditor.vue';
 import SettingsToggle from './components/SettingsToggle.vue';
 import { getContext } from 'st-context';
+import { Popup, POPUP_TYPE } from 'st-popup';
 
 const connectionSnapshot = computed(() => getConnectionSnapshot());
 const toolCallingSnapshot = computed(() => getToolCallingSnapshot());
@@ -258,6 +256,24 @@ async function handleAgentContinue() {
   const prompt = agentInput.value.trim() || '继续';
   agentInput.value = '';
   await runAlyceTurn(prompt, 'agent');
+}
+
+function zoomEvent(event: any) {
+  const content = `
+    <div style="text-align: left; max-width: 100%; white-space: pre-wrap; font-family: Consolas, monospace; line-height: 1.5; padding: 10px;">
+      <h3 style="margin-top: 0;">${event.title} <small style="opacity: 0.7;">(${event.badge})</small></h3>
+      ${event.body ? `<div style="margin-bottom: 10px;"><strong>内容：</strong><br/>${String(event.body).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+      ${event.meta ? `<div style="font-size: 0.9em; opacity: 0.8; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;"><strong>附加信息：</strong><br/>${String(event.meta).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+    </div>
+  `;
+  const popup = new Popup(content, POPUP_TYPE.TEXT, '', {
+    wide: true,
+    large: true,
+    okButton: '关闭',
+    cancelButton: false,
+    allowVerticalScrolling: true
+  });
+  popup.show();
 }
 
 window.alyceDeleteCustomStep = deleteCustomStep;

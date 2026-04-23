@@ -76,7 +76,6 @@ export function resetRunState(modeUsed: 'linear' | 'agent', inputText: string) {
 export function buildInterpolationMap(step: WorkflowStep, scratch: ScratchData, extra: any = {}) {
     return {
         input: scratch.input,
-        thinking_chain: settingsState.chainPreset,
         thinking: scratch.thinking,
         outline: scratch.outline,
         draft: scratch.draft,
@@ -98,7 +97,11 @@ async function tick() {
 export async function runQuietStage(step: WorkflowStep, scratch: ScratchData, options = {}) {
     const context = getContext();
     const prompt = interpolateTemplate(step.prompt, buildInterpolationMap(step, scratch, options));
-    const result = await context.generateQuietPrompt({ quietPrompt: prompt });
+    const result = await context.generateQuietPrompt({ 
+        quietPrompt: prompt,
+        quietToLoud: true, 
+        skipWIAN: true, // 避免一些无关注入
+    });
     return String(result ?? '').trim();
 }
 
@@ -205,16 +208,16 @@ export async function runAlyceTurn(inputText: string, modeUsed: 'linear' | 'agen
             if (step.type === 'think') {
                 scratch.thinking = await runQuietStage(step, scratch);
                 addStageOutput(step.title, scratch.thinking, '内部工作笔记');
-                pushEvent('thinking', step.title, shorten(scratch.thinking, 700), '隐藏思考阶段已完成。');
+                pushEvent('thinking', step.title, scratch.thinking, '隐藏思考阶段已完成。');
             } else if (step.type === 'outline') {
                 scratch.outline = await runQuietStage(step, scratch);
                 addStageOutput(step.title, scratch.outline, '粗略大纲');
-                pushEvent('thinking', step.title, shorten(scratch.outline, 700), '结构分析已完成。');
+                pushEvent('thinking', step.title, scratch.outline, '结构分析已完成。');
             } else if (step.type === 'draft') {
                 scratch.draft = await runQuietStage(step, scratch);
                 scratch.currentDraft = scratch.draft;
                 addStageOutput(step.title, scratch.draft, '第一版初稿');
-                pushEvent('assistant', step.title, shorten(scratch.draft, 700), '第一版工作初稿已生成。');
+                pushEvent('assistant', step.title, scratch.draft, '第一版工作初稿已生成。');
             } else if (step.type === 'revise') {
                 const revisionRounds = getRevisionRounds(step);
                 if (revisionRounds === 0) {
@@ -225,19 +228,19 @@ export async function runAlyceTurn(inputText: string, modeUsed: 'linear' | 'agen
                         const revised = await runQuietStage(step, scratch, { revisionIndex: index, revisionCount: revisionRounds });
                         scratch.currentDraft = revised;
                         addStageOutput(`${step.title} ${index}/${revisionRounds}`, revised, '整改回合');
-                        pushEvent('tool', `${step.title} ${index}/${revisionRounds}`, shorten(revised, 700), `第 ${index} / ${revisionRounds} 轮整改。`);
+                        pushEvent('tool', `${step.title} ${index}/${revisionRounds}`, revised, `第 ${index} / ${revisionRounds} 轮整改。`);
                         await tick();
                     }
                 }
             } else if (step.type === 'final') {
                 scratch.final = await runQuietStage(step, scratch);
                 addStageOutput(step.title, scratch.final, '终稿封装');
-                pushEvent('assistant', step.title, shorten(scratch.final, 900), '最终答案已准备完成。');
+                pushEvent('assistant', step.title, scratch.final, '最终答案已准备完成。');
             } else {
                 const transformed = await runQuietStage(step, scratch);
                 scratch.currentDraft = transformed;
                 addStageOutput(step.title, transformed, '自定义处理');
-                pushEvent('tool', step.title, shorten(transformed, 700), '自定义环节已完成。');
+                pushEvent('tool', step.title, transformed, '自定义环节已完成。');
             }
 
             syncRunArtifacts(scratch);

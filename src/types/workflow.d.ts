@@ -12,7 +12,6 @@ export interface WorkflowStep {
 export interface AlyceSettings {
     enabled: boolean;
     mode: 'linear' | 'agent';
-    chainPreset: string;
     workflow: WorkflowStep[];
 }
 

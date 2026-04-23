@@ -55,16 +55,6 @@
     </div>
   </div>
 
-  <div v-if="isThink" class="alyce__field alyce__field--full">
-    <label>预设思维链</label>
-    <textarea 
-      rows="8"
-      data-macros-autocomplete="hide"
-      :value="settingsState.chainPreset"
-      @input="updateChainPreset(($event.target as HTMLTextAreaElement).value)"
-    ></textarea>
-  </div>
-
   <div class="alyce__field alyce__field--full">
     <label>提示词模板</label>
     <textarea 
@@ -114,7 +104,7 @@ const typeLabel = computed(() => {
 
 const description = computed(() => {
   switch (props.step.type) {
-    case 'think': return '按照预设思维链进行一次隐藏思考，产出内部工作笔记。';
+    case 'think': return '进行一次隐藏思考，产出内部工作笔记。';
     case 'outline': return '在起草之前先整理大致结构和覆盖范围。';
     case 'draft': return '根据大纲生成第一版工作初稿。';
     case 'revise': return '按预设整改提示词进行可重复的整改循环。';
@@ -142,11 +132,6 @@ function updateRounds(value: number) {
 
 function updatePrompt(prompt: string) {
   props.step.prompt = prompt;
-  saveSettings();
-}
-
-function updateChainPreset(preset: string) {
-  settingsState.chainPreset = preset;
   saveSettings();
 }
 </script>
