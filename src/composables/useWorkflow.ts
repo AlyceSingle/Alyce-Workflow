@@ -2,7 +2,6 @@ import { reactive } from 'vue';
 import { getContext } from 'st-context';
 import { sendMessageAsUser, saveReply } from 'st-script';
 import { normalizeOutputVarName, settingsState } from '../store/settings';
-import { getToolCallingSnapshot } from './useSillyTavern';
 import type { RunState, ScratchData, WorkflowStep } from '../types/workflow';
 
 interface AssetEditInstruction {
@@ -11,14 +10,16 @@ interface AssetEditInstruction {
     newString: string;
     replaceAll: boolean;
 }
-
 interface AssetEditResult {
     outputs: Record<string, string>;
     lastOutput: string;
     editedVarNames: string[];
+    skippedEdits: string[];
     appliedCount: number;
     matchCount: number;
 }
+
+type AssetNameMap = Record<string, string>;
 
 const EDIT_TOOL_PROMPT_PREFIX = `你正在使用 Alyce 的内存资产增量编辑工具。
 本环节不要重写全文，只返回一个或多个 EDIT 块。
@@ -40,14 +41,12 @@ export const runState = reactive<RunState>({
     status: '',
     statusKind: 'idle',
     events: [],
-    stageOutputs: [],
     finalOutput: '',
     lastInput: '',
     lastScratch: null,
     currentStepId: null,
     stepStatuses: {},
     modeUsed: null,
-    toolCallingNote: null,
 });
 
 export function pushEvent(kind: 'user' | 'thinking' | 'tool' | 'assistant' | 'error' | 'system', title: string, body = '', meta = '') {
@@ -69,17 +68,13 @@ export function pushEvent(kind: 'user' | 'thinking' | 'tool' | 'assistant' | 'er
     });
 }
 
-export function addStageOutput(title: string, body: string, meta = '') {
-    runState.stageOutputs.push({ title, body, meta });
-}
-
 export function setStepStatus(stepId: string, status: string) {
     runState.stepStatuses[stepId] = status;
 }
 
 export function syncRunArtifacts(scratch: ScratchData) {
     runState.lastScratch = structuredClone(scratch);
-    runState.finalOutput = scratch.lastOutput;
+    runState.finalOutput = resolveFinalOutput(scratch) || scratch.lastOutput;
 }
 
 export function resetRunState(modeUsed: 'linear' | 'agent', inputText: string) {
@@ -87,20 +82,17 @@ export function resetRunState(modeUsed: 'linear' | 'agent', inputText: string) {
     runState.statusKind = 'running';
     runState.status = 'Alyce 已开始处理。';
     runState.events = [];
-    runState.stageOutputs = [];
     runState.finalOutput = '';
     runState.lastInput = inputText;
     runState.lastScratch = null;
     runState.currentStepId = null;
     runState.stepStatuses = {};
     runState.modeUsed = modeUsed;
-    runState.toolCallingNote = getToolCallingSnapshot().note;
 
     for (const step of settingsState.workflow) {
         runState.stepStatuses[step.id] = step.enabled === false ? 'skipped' : 'pending';
     }
 }
-
 export function buildInterpolationMap(step: WorkflowStep, scratch: ScratchData, extra: any = {}) {
     return {
         input: scratch.input,
@@ -117,12 +109,40 @@ export function interpolateTemplate(template: string, values: Record<string, str
     return String(template ?? '').replace(/\{\{\s*([^{}\r\n]+?)\s*\}\}/g, (_, key) => String(values[String(key).trim()] ?? ''));
 }
 
-export function getStepOutputVarName(step: WorkflowStep) {
-    const customName = normalizeOutputVarName(step.outputVarName);
+function getExplicitStepOutputVarName(step: WorkflowStep) {
+    return normalizeOutputVarName(step.outputVarName);
+}
+
+function getBaseStepOutputVarName(step: WorkflowStep) {
+    const customName = getExplicitStepOutputVarName(step);
     if (customName) {
         return customName;
     }
     return normalizeOutputVarName(step.title) || step.id;
+}
+
+export function getStepOutputVarName(step: WorkflowStep, assetNameMap?: AssetNameMap) {
+    return assetNameMap?.[step.id] || getBaseStepOutputVarName(step);
+}
+
+function buildAssetNameMap(workflow: WorkflowStep[]) {
+    const seen = new Map<string, number>();
+    const assetNameMap: AssetNameMap = {};
+
+    for (const step of workflow) {
+        const explicitName = getExplicitStepOutputVarName(step);
+        if (explicitName) {
+            assetNameMap[step.id] = explicitName;
+            continue;
+        }
+
+        const baseName = getBaseStepOutputVarName(step);
+        const count = seen.get(baseName) || 0;
+        seen.set(baseName, count + 1);
+        assetNameMap[step.id] = count === 0 ? baseName : `${baseName}_${count + 1}`;
+    }
+
+    return assetNameMap;
 }
 
 function countMatches(content: string, needle: string) {
@@ -198,6 +218,7 @@ export function applyAssetEdit(response: string, scratch: ScratchData, fallbackV
 
     const outputs = { ...scratch.outputs };
     const editedVarNames: string[] = [];
+    const skippedEdits: string[] = [];
     let appliedCount = 0;
     let totalMatches = 0;
 
@@ -212,7 +233,8 @@ export function applyAssetEdit(response: string, scratch: ScratchData, fallbackV
 
         const matchCount = countMatches(currentValue, instruction.oldString);
         if (matchCount === 0) {
-            throw new Error(`[EDIT: ${instruction.varName}] OLD 内容未在当前资产中找到。`);
+            skippedEdits.push(`{{${instruction.varName}}}: OLD 内容未找到`);
+            continue;
         }
         if (matchCount > 1 && !instruction.replaceAll) {
             throw new Error(`[EDIT: ${instruction.varName}] 找到 ${matchCount} 处 OLD 内容。请提供更精确上下文，或在头部使用 replace_all=true。`);
@@ -232,15 +254,16 @@ export function applyAssetEdit(response: string, scratch: ScratchData, fallbackV
 
     return {
         outputs,
-        lastOutput: preferredVarName ? outputs[preferredVarName] ?? '' : '',
+        lastOutput: preferredVarName ? outputs[preferredVarName] ?? scratch.lastOutput : scratch.lastOutput,
         editedVarNames: [...new Set(editedVarNames)],
+        skippedEdits,
         appliedCount,
         matchCount: totalMatches,
     };
 }
 
-function saveStepOutput(step: WorkflowStep, scratch: ScratchData, output: string) {
-    const varName = getStepOutputVarName(step);
+function saveStepOutput(step: WorkflowStep, scratch: ScratchData, output: string, assetNameMap: AssetNameMap) {
+    const varName = getStepOutputVarName(step, assetNameMap);
     scratch.outputs[varName] = output;
     scratch.lastOutput = output;
     return varName;
@@ -391,7 +414,10 @@ export async function runAlyceTurn(inputText: string, modeUsed: 'linear' | 'agen
         }
         await tick();
 
-        for (const step of getRunnableWorkflow()) {
+        const runnableWorkflow = getRunnableWorkflow();
+        const assetNameMap = buildAssetNameMap(runnableWorkflow);
+
+        for (const step of runnableWorkflow) {
             runState.currentStepId = step.id;
             setStepStatus(step.id, 'in_progress');
             runState.status = `正在执行${step.title}...`;
@@ -405,20 +431,30 @@ export async function runAlyceTurn(inputText: string, modeUsed: 'linear' | 'agen
                 let meta = step.description || '已完成';
 
                 if (step.isEditTool === true) {
-                    const editResult = applyAssetEdit(rawOutput, scratch, getStepOutputVarName(step));
+                    const editResult = applyAssetEdit(rawOutput, scratch, getStepOutputVarName(step, assetNameMap));
                     scratch.outputs = editResult.outputs;
                     scratch.lastOutput = editResult.lastOutput;
 
                     output = scratch.lastOutput;
-                    meta = `${meta} · 已应用 ${editResult.appliedCount} 处编辑：${editResult.editedVarNames.map(name => `{{${name}}}`).join('、')}`;
-                    pushEvent('tool', '增量编辑已应用', rawOutput, `匹配 ${editResult.matchCount} 处，更新 ${editResult.editedVarNames.join(', ')}`);
+                    const editedSummary = editResult.editedVarNames.length
+                        ? `已应用 ${editResult.appliedCount} 处编辑：${editResult.editedVarNames.map(name => `{{${name}}}`).join('、')}`
+                        : '未应用编辑';
+                    const skippedSummary = editResult.skippedEdits.length
+                        ? ` · 已跳过 ${editResult.skippedEdits.length} 处：${editResult.skippedEdits.join('；')}`
+                        : '';
+                    meta = `${meta} · ${editedSummary}${skippedSummary}`;
+                    pushEvent(
+                        editResult.skippedEdits.length ? 'error' : 'tool',
+                        editResult.skippedEdits.length ? '增量编辑部分跳过' : '增量编辑已应用',
+                        rawOutput,
+                        `匹配 ${editResult.matchCount} 处，更新 ${editResult.editedVarNames.join(', ') || '无'}${skippedSummary}`
+                    );
                 } else {
-                    const outputVarName = saveStepOutput(step, scratch, rawOutput);
+                    const outputVarName = saveStepOutput(step, scratch, rawOutput, assetNameMap);
                     meta = step.description || `已保存为 {{${outputVarName}}}`;
                 }
 
                 const phaseTitle = rounds > 1 ? `${step.title} ${index}/${rounds}` : step.title;
-                addStageOutput(phaseTitle, output, meta);
                 pushEvent('thinking', phaseTitle, output, meta || '该环节已执行。');
                 await tick();
             }
@@ -445,13 +481,4 @@ export async function runAlyceTurn(inputText: string, modeUsed: 'linear' | 'agen
         console.error('[Alyce]', error);
         toastr.error(error?.message || 'Alyce 运行失败。');
     }
-}
-
-export async function runAgentFollowup(promptText: string) {
-    const followup = String(promptText || '').trim();
-    if (!followup) {
-        toastr.warning('请输入补充指令。');
-        return;
-    }
-    await runAlyceTurn(followup, 'agent');
 }

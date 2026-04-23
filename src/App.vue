@@ -87,7 +87,18 @@
         <div class="alyce__agentGrid">
           <section class="alyce__panel alyce__panel--agentMain">
             <div class="alyce__panelHeader alyce__panelHeader--left">
-              <h3>进度事件流</h3>
+              <div class="alyce__panelHeaderRow">
+                <h3>进度事件流</h3>
+                <button
+                  v-if="runState.events.length"
+                  type="button"
+                  class="menu_button alyce__streamClearBtn"
+                  title="清空全部记录"
+                  @click="clearEvents"
+                >
+                  清空全部
+                </button>
+              </div>
               <p>参考本地 AlyceAgent 的终端信息架构，实时展示事件、状态与继续入口。最终回复会直接写回聊天，而不是停留在工作台。</p>
             </div>
             
@@ -100,7 +111,24 @@
                 <div class="alyce__streamHeader">
                   <span class="alyce__badge" :class="`alyce__badge--${event.kind}`">{{ event.badge }}</span>
                   <strong>{{ event.title }}</strong>
-                  <button class="alyce__zoomBtn" @click="zoomEvent(event)" title="放大查看" style="margin-left: auto; cursor: pointer; background: none; border: none; color: inherit; opacity: 0.7;"><i class="fa-solid fa-magnifying-glass"></i></button>
+                  <div class="alyce__streamActions">
+                    <button
+                      type="button"
+                      class="alyce__streamActionBtn"
+                      @click.stop="zoomEvent(event)"
+                      title="放大查看"
+                    >
+                      <i class="fa-solid fa-magnifying-glass"></i>
+                    </button>
+                    <button
+                      type="button"
+                      class="alyce__streamActionBtn alyce__streamActionBtn--danger"
+                      @click.stop="deleteEvent(i)"
+                      title="删除此记录"
+                    >
+                      <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                  </div>
                 </div>
                 <div v-if="event.body" class="alyce__streamBody">{{ shorten(event.body, 1000) }}</div>
                 <div v-if="event.meta" class="alyce__streamMeta">{{ event.meta }}</div>
@@ -176,7 +204,7 @@
 import { ref, computed, watch, nextTick } from 'vue';
 import { settingsState, saveSettings, DEFAULT_FINAL_OUTPUT_TEMPLATE, DEFAULT_STATUS, ENABLED_IDLE_STATUS, createCustomStep } from './store/settings';
 import { runState, runAlyceTurn } from './composables/useWorkflow';
-import { getConnectionSnapshot, getToolCallingSnapshot, shorten } from './composables/useSillyTavern';
+import { escapeHtml, getConnectionSnapshot, getToolCallingSnapshot, shorten } from './composables/useSillyTavern';
 import WorkflowStep from './components/WorkflowStep.vue';
 import PromptEditor from './components/PromptEditor.vue';
 import SettingsToggle from './components/SettingsToggle.vue';
@@ -198,7 +226,8 @@ const agentInput = ref('');
 const completedTasks = computed(() => Object.values(runState.stepStatuses).filter(s => s === 'completed').length);
 const totalTasks = computed(() => settingsState.workflow.filter(s => s.enabled !== false).length);
 
-watch(() => runState.events.length, () => {
+watch(() => runState.events.length, (newLength, oldLength) => {
+  if (newLength <= oldLength) return;
   nextTick(() => {
     if (streamContainer.value) {
       streamContainer.value.scrollTop = streamContainer.value.scrollHeight;
@@ -209,10 +238,24 @@ watch(() => runState.events.length, () => {
 function insertCustomStep(index: number) {
   const safeIdx = Math.min(index, settingsState.workflow.length);
   const step = createCustomStep();
+  step.title = getNextCustomStepTitle();
   step.description = '';
   settingsState.workflow.splice(safeIdx, 0, step);
   selectedStepId.value = step.id;
   saveSettings();
+}
+
+function getNextCustomStepTitle() {
+  const baseTitle = '自定义环节';
+  const usedTitles = new Set(settingsState.workflow.map(step => step.title));
+  if (!usedTitles.has(baseTitle)) return baseTitle;
+
+  for (let index = 2; index < 1000; index++) {
+    const candidate = `${baseTitle} ${index}`;
+    if (!usedTitles.has(candidate)) return candidate;
+  }
+
+  return `${baseTitle} ${Date.now()}`;
 }
 
 function deleteCustomStep(id: string) {
@@ -266,12 +309,25 @@ function updateFinalOutputTemplate(template: string) {
   saveSettings();
 }
 
+function deleteEvent(index: number) {
+  if (index < 0 || index >= runState.events.length) return;
+  runState.events.splice(index, 1);
+}
+
+function clearEvents() {
+  runState.events = [];
+}
+
 function zoomEvent(event: any) {
+  const safeTitle = escapeHtml(event.title);
+  const safeBadge = escapeHtml(event.badge);
+  const safeBody = event.body ? escapeHtml(event.body) : '';
+  const safeMeta = event.meta ? escapeHtml(event.meta) : '';
   const content = `
     <div style="text-align: left; max-width: 100%; white-space: pre-wrap; font-family: Consolas, monospace; line-height: 1.5; padding: 10px;">
-      <h3 style="margin-top: 0;">${event.title} <small style="opacity: 0.7;">(${event.badge})</small></h3>
-      ${event.body ? `<div style="margin-bottom: 10px;"><strong>内容：</strong><br/>${String(event.body).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
-      ${event.meta ? `<div style="font-size: 0.9em; opacity: 0.8; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;"><strong>附加信息：</strong><br/>${String(event.meta).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+      <h3 style="margin-top: 0;">${safeTitle} <small style="opacity: 0.7;">(${safeBadge})</small></h3>
+      ${safeBody ? `<div style="margin-bottom: 10px;"><strong>内容：</strong><br/>${safeBody}</div>` : ''}
+      ${safeMeta ? `<div style="font-size: 0.9em; opacity: 0.8; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;"><strong>附加信息：</strong><br/>${safeMeta}</div>` : ''}
     </div>
   `;
   const popup = new Popup(content, POPUP_TYPE.TEXT, '', {

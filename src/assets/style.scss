@@ -80,14 +80,6 @@
     line-height: 1.18;
 }
 
-#alyce_workspace .alyce__subtitle {
-    margin: 0;
-    max-width: 760px;
-    color: var(--alyce-muted);
-    line-height: 1.4;
-    font-size: 13px;
-}
-
 #alyce_workspace .alyce__modeTab.menu_button,
 #alyce_workspace .alyce__composerActions .menu_button {
     border-radius: 999px;
@@ -226,7 +218,6 @@
     opacity: 0.94;
 }
 
-#alyce_workspace .alyce__control,
 #alyce_workspace .alyce__toggle {
     display: inline-flex;
     gap: 8px;
@@ -242,10 +233,6 @@
     color: var(--alyce-accent-strong);
     font-weight: 700;
     font-size: 13px;
-}
-
-#alyce_workspace .alyce__control input {
-    width: 80px;
 }
 
 #alyce_workspace .alyce__statusBanner {
@@ -292,6 +279,14 @@
 #alyce_workspace .alyce__panelHeader--left {
     justify-items: start;
     text-align: left;
+}
+
+#alyce_workspace .alyce__panelHeaderRow {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
 }
 
 #alyce_workspace .alyce__panelHeader h3 {
@@ -391,14 +386,6 @@
     opacity: 0.54;
 }
 
-#alyce_workspace .alyce__nodeType {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--alyce-accent-strong);
-}
-
 #alyce_workspace .alyce__nodeTitle {
     font-size: 14px;
     font-weight: 800;
@@ -482,7 +469,6 @@
     color: var(--alyce-ink);
 }
 
-#alyce_workspace .alyce__editorType,
 #alyce_workspace .alyce__editorState {
     display: inline-flex;
     align-items: center;
@@ -530,15 +516,6 @@
 #alyce_workspace .alyce__field--toggle,
 #alyce_workspace .alyce__field--full {
     grid-column: 1 / -1;
-}
-
-#alyce_workspace .alyce__fieldValue {
-    padding: 10px 12px;
-    border-radius: 12px;
-    border: 1px solid rgba(129, 64, 21, 0.14);
-    background: rgba(255, 255, 255, 0.74);
-    color: var(--alyce-ink);
-    line-height: 1.45;
 }
 
 #alyce_workspace .alyce__field label,
@@ -599,7 +576,6 @@
     color: var(--alyce-danger);
 }
 
-#alyce_workspace .alyce__stageLog,
 #alyce_workspace .alyce__agentStream,
 #alyce_workspace .alyce__todoPanel {
     display: grid;
@@ -626,7 +602,6 @@
     line-height: 1.5;
 }
 
-#alyce_workspace .alyce__stageCard,
 #alyce_workspace .alyce__streamItem,
 #alyce_workspace .alyce__todoItem,
 #alyce_workspace .alyce__detailCard {
@@ -636,13 +611,6 @@
     padding: 12px;
 }
 
-#alyce_workspace .alyce__stageCard summary {
-    cursor: pointer;
-    font-weight: 700;
-    color: var(--alyce-accent-strong);
-}
-
-#alyce_workspace .alyce__stageBody,
 #alyce_workspace .alyce__streamBody,
 #alyce_workspace .alyce__detailBody {
     margin-top: 8px;
@@ -652,25 +620,11 @@
     line-height: 1.5;
 }
 
-#alyce_workspace .alyce__stageMeta,
 #alyce_workspace .alyce__streamMeta,
 #alyce_workspace .alyce__todoMeta {
     margin-top: 6px;
     font-size: 12px;
     color: var(--alyce-muted);
-}
-
-#alyce_workspace .alyce__finalOutput {
-    min-height: 320px;
-    margin: 0;
-    padding: 14px;
-    border-radius: 14px;
-    border: 1px solid var(--alyce-line);
-    background: rgba(255, 255, 255, 0.74);
-    white-space: pre-wrap;
-    word-break: break-word;
-    line-height: 1.56;
-    font-family: Consolas, "Courier New", monospace;
 }
 
 #alyce_workspace .alyce__agentStream {
@@ -682,9 +636,15 @@
 
 #alyce_workspace .alyce__streamHeader {
     display: flex;
-    justify-content: space-between;
     gap: 12px;
     align-items: center;
+}
+
+#alyce_workspace .alyce__streamActions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
 }
 
 #alyce_workspace .alyce__badge {
@@ -756,9 +716,54 @@
     box-shadow: 0 10px 20px rgba(115, 57, 26, 0.2);
 }
 
+#alyce_workspace .alyce__streamActionBtn {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.56);
+    border: 1px solid rgba(129, 64, 21, 0.12);
+    border-radius: 999px;
+    color: inherit;
+    opacity: 0.72;
+}
+
+#alyce_workspace .alyce__streamActionBtn:hover {
+    opacity: 1;
+    background: rgba(164, 92, 46, 0.1);
+    border-color: rgba(129, 64, 21, 0.28);
+}
+
+#alyce_workspace .alyce__streamActionBtn--danger {
+    color: var(--alyce-danger);
+}
+
+#alyce_workspace .alyce__streamActionBtn--danger:hover {
+    background: rgba(161, 58, 50, 0.1);
+    border-color: rgba(161, 58, 50, 0.3);
+}
+
 #alyce_workspace .alyce__composerActions .menu_button:hover {
     background: linear-gradient(135deg, #8e5730, #5f2e14);
     border-color: rgba(95, 46, 20, 0.92);
+}
+
+#alyce_workspace .alyce__streamClearBtn.menu_button {
+    min-width: 84px;
+    min-height: 32px;
+    padding: 5px 10px;
+    border-color: rgba(161, 58, 50, 0.28);
+    color: var(--alyce-danger);
+    background: rgba(255, 248, 246, 0.88);
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+#alyce_workspace .alyce__streamClearBtn.menu_button:hover {
+    background: rgba(161, 58, 50, 0.1);
+    border-color: rgba(161, 58, 50, 0.38);
 }
 
 #alyce_workspace .alyce__statusBar {
@@ -878,10 +883,6 @@
     min-height: 0;
 }
 
-#alyce_workspace .alyce__view--hidden {
-    display: none;
-}
-
 @media screen and (max-width: 1100px) {
     #alyce_workspace .alyce__hero,
     #alyce_workspace .alyce__toolbar {
@@ -889,7 +890,6 @@
         display: grid;
     }
 
-    #alyce_workspace .alyce__resultGrid,
     #alyce_workspace .alyce__agentGrid {
         grid-template-columns: 1fr;
     }
