@@ -382,6 +382,10 @@
     border-color: rgba(62, 125, 86, 0.52);
 }
 
+#alyce_workspace .alyce__nodeButton.is-error {
+    border-color: rgba(161, 58, 50, 0.58);
+}
+
 #alyce_workspace .alyce__nodeButton.is-disabled {
     opacity: 0.54;
 }
@@ -518,8 +522,7 @@
     grid-column: 1 / -1;
 }
 
-#alyce_workspace .alyce__field label,
-#alyce_workspace .alyce__composerLabel {
+#alyce_workspace .alyce__field label {
     font-size: 12px;
     font-weight: 700;
     color: var(--alyce-accent-strong);
@@ -538,8 +541,7 @@
 
 #alyce_workspace .alyce__field textarea,
 #alyce_workspace .alyce__field input[type="text"],
-#alyce_workspace .alyce__field input[type="number"],
-#alyce_workspace .alyce__composer textarea {
+#alyce_workspace .alyce__field input[type="number"] {
     width: 100%;
     border-radius: 12px;
     border: 1px solid rgba(129, 64, 21, 0.18);
@@ -551,8 +553,7 @@
     font-size: 14px;
 }
 
-#alyce_workspace .alyce__field textarea,
-#alyce_workspace .alyce__composer textarea {
+#alyce_workspace .alyce__field textarea {
     resize: vertical;
 }
 
@@ -750,6 +751,23 @@
     border-color: rgba(95, 46, 20, 0.92);
 }
 
+#alyce_workspace .alyce__composerActions .menu_button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+#alyce_workspace .alyce__composerActions .alyce__secondaryAction.menu_button {
+    border-color: rgba(129, 64, 21, 0.28);
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--alyce-ink);
+    box-shadow: none;
+}
+
+#alyce_workspace .alyce__composerActions .alyce__secondaryAction.menu_button:hover {
+    background: rgba(164, 92, 46, 0.12);
+    border-color: rgba(129, 64, 21, 0.38);
+}
+
 #alyce_workspace .alyce__streamClearBtn.menu_button {
     min-width: 84px;
     min-height: 32px;
@@ -859,6 +877,10 @@
 
 #alyce_workspace .alyce__todoItem.is-completed {
     border-color: rgba(62, 125, 86, 0.28);
+}
+
+#alyce_workspace .alyce__todoItem.is-error {
+    border-color: rgba(161, 58, 50, 0.32);
 }
 
 #alyce_workspace .alyce__todoItem.is-skipped {

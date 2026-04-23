@@ -7,6 +7,7 @@ export interface WorkflowStep {
     rounds: number;
     outputVarName?: string;
     isEditTool?: boolean;
+    omitWorldInfoAndPreset?: boolean;
 }
 
 export interface AlyceSettings {
@@ -35,6 +36,9 @@ export interface RunState {
     currentStepId: string | null;
     stepStatuses: Record<string, string>;
     modeUsed: 'linear' | 'agent' | null;
+    failedStepId: string | null;
+    failedRoundIndex: number | null;
+    canResume: boolean;
 }
 
 export interface ScratchData {

@@ -4,20 +4,6 @@ import { getTextGenModel } from 'st-textgen';
 import { nai_settings } from 'st-nai';
 import { kai_settings } from 'st-kai';
 
-export function getToolCallingSnapshot() {
-    const context = getContext();
-    const quietTools = typeof context.canPerformToolCalls === 'function' ? context.canPerformToolCalls('quiet') : false;
-    const liveTools = typeof context.canPerformToolCalls === 'function' ? context.canPerformToolCalls('normal') : false;
-
-    return {
-        quietTools,
-        liveTools,
-        note: quietTools
-            ? '当前后端允许在静默运行阶段执行工具调用。'
-            : '静默运行会继承当前 API，但这里的静默生成暂时不能直接执行工具调用，所以代理模式目前侧重可视化编排、状态展示和继续控制。',
-    };
-}
-
 export function getConnectionSnapshot() {
     const context = getContext();
     const mainApi = context.mainApi || 'unknown';

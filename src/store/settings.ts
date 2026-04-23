@@ -50,6 +50,7 @@ export function createCustomStep(): WorkflowStep {
         rounds: 1,
         outputVarName: '',
         isEditTool: false,
+        omitWorldInfoAndPreset: false,
     };
 }
 
@@ -72,6 +73,7 @@ function createDefaultWorkflow(): WorkflowStep[] {
             rounds: 1,
             outputVarName: 'thinking',
             isEditTool: false,
+            omitWorldInfoAndPreset: false,
         },
         {
             id: '4076f74c-7cf7-492c-a361-0122275abfdf',
@@ -88,6 +90,7 @@ function createDefaultWorkflow(): WorkflowStep[] {
             rounds: 1,
             outputVarName: 'content',
             isEditTool: false,
+            omitWorldInfoAndPreset: false,
         },
         {
             id: 'f62ae375-4ea5-446d-ace3-c445de423dd9',
@@ -107,6 +110,7 @@ content:{{content}}
             rounds: 1,
             outputVarName: '',
             isEditTool: true,
+            omitWorldInfoAndPreset: false,
         },
     ];
 }
@@ -129,6 +133,7 @@ function normalizeStep(step: any): WorkflowStep {
         rounds,
         outputVarName: normalizeOutputVarName(step.outputVarName),
         isEditTool: step.isEditTool === true,
+        omitWorldInfoAndPreset: step.omitWorldInfoAndPreset === true,
     };
 }
 

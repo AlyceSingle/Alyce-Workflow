@@ -6,6 +6,7 @@
         'is-selected': isSelected,
         'is-current': isCurrent,
         'is-completed': status === 'completed',
+        'is-error': status === 'error',
         'is-disabled': step.enabled === false
       }"
       @click="$emit('select', step.id)"

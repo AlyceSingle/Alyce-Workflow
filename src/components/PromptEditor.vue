@@ -82,6 +82,18 @@
       </label>
       <p class="alyce__note">开启后，运行时会自动在模板顶部注入 EDIT 工具说明，并让 AI 可以调用编辑工具。</p>
     </div>
+
+    <div class="alyce__field alyce__field--toggle">
+      <label class="alyce__toggle">
+        <input
+          type="checkbox"
+          :checked="step.omitWorldInfoAndPreset === true"
+          @change="updateOmitWorldInfoAndPreset(($event.target as HTMLInputElement).checked)"
+        >
+        <span>不发送世界书/预设</span>
+      </label>
+      <p class="alyce__note">开启后，这个环节只发送当前提示词与已有资产，不继承 SillyTavern 的世界书、预设提示词和聊天上下文。</p>
+    </div>
   </div>
 
   <div class="alyce__field alyce__field--full">
@@ -136,6 +148,11 @@ function updateOutputVarName(value: string) {
 
 function updateIsEditTool(enabled: boolean) {
   props.step.isEditTool = enabled;
+  saveSettings();
+}
+
+function updateOmitWorldInfoAndPreset(enabled: boolean) {
+  props.step.omitWorldInfoAndPreset = enabled;
   saveSettings();
 }
 

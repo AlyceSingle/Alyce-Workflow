@@ -6306,69 +6306,6 @@ function shouldSetAsPropForVueCE(el, key) {
   const camelKey = camelize(key);
   return Array.isArray(props) ? props.some((prop) => camelize(prop) === camelKey) : Object.keys(props).some((prop) => camelize(prop) === camelKey);
 }
-const getModelAssigner = (vnode) => {
-  const fn = vnode.props["onUpdate:modelValue"] || false;
-  return isArray(fn) ? (value) => invokeArrayFns(fn, value) : fn;
-};
-function onCompositionStart(e) {
-  e.target.composing = true;
-}
-function onCompositionEnd(e) {
-  const target = e.target;
-  if (target.composing) {
-    target.composing = false;
-    target.dispatchEvent(new Event("input"));
-  }
-}
-const assignKey = /* @__PURE__ */ Symbol("_assign");
-function castValue(value, trim, number) {
-  if (trim) value = value.trim();
-  if (number) value = looseToNumber(value);
-  return value;
-}
-const vModelText = {
-  created(el, { modifiers: { lazy, trim, number } }, vnode) {
-    el[assignKey] = getModelAssigner(vnode);
-    const castToNumber = number || vnode.props && vnode.props.type === "number";
-    addEventListener(el, lazy ? "change" : "input", (e) => {
-      if (e.target.composing) return;
-      el[assignKey](castValue(el.value, trim, castToNumber));
-    });
-    if (trim || castToNumber) {
-      addEventListener(el, "change", () => {
-        el.value = castValue(el.value, trim, castToNumber);
-      });
-    }
-    if (!lazy) {
-      addEventListener(el, "compositionstart", onCompositionStart);
-      addEventListener(el, "compositionend", onCompositionEnd);
-      addEventListener(el, "change", onCompositionEnd);
-    }
-  },
-  // set value on mounted so it's after min/max for type="range"
-  mounted(el, { value }) {
-    el.value = value == null ? "" : value;
-  },
-  beforeUpdate(el, { value, oldValue, modifiers: { lazy, trim, number } }, vnode) {
-    el[assignKey] = getModelAssigner(vnode);
-    if (el.composing) return;
-    const elValue = (number || el.type === "number") && !/^0\d/.test(el.value) ? looseToNumber(el.value) : el.value;
-    const newValue = value == null ? "" : value;
-    if (elValue === newValue) {
-      return;
-    }
-    const rootNode = el.getRootNode();
-    if ((rootNode instanceof Document || rootNode instanceof ShadowRoot) && rootNode.activeElement === el && el.type !== "range") {
-      if (lazy && value === oldValue) {
-        return;
-      }
-      if (trim && el.value.trim() === newValue) {
-        return;
-      }
-    }
-    el.value = newValue;
-  }
-};
 const systemModifiers = ["ctrl", "shift", "alt", "meta"];
 const modifierGuards = {
   stop: (e) => e.stopPropagation(),
@@ -6472,7 +6409,8 @@ function createCustomStep() {
     enabled: true,
     rounds: 1,
     outputVarName: "",
-    isEditTool: false
+    isEditTool: false,
+    omitWorldInfoAndPreset: false
   };
 }
 function createDefaultWorkflow() {
@@ -6493,7 +6431,8 @@ function createDefaultWorkflow() {
       enabled: true,
       rounds: 1,
       outputVarName: "thinking",
-      isEditTool: false
+      isEditTool: false,
+      omitWorldInfoAndPreset: false
     },
     {
       id: "4076f74c-7cf7-492c-a361-0122275abfdf",
@@ -6509,7 +6448,8 @@ function createDefaultWorkflow() {
       enabled: true,
       rounds: 1,
       outputVarName: "content",
-      isEditTool: false
+      isEditTool: false,
+      omitWorldInfoAndPreset: false
     },
     {
       id: "f62ae375-4ea5-446d-ace3-c445de423dd9",
@@ -6528,7 +6468,8 @@ content:{{content}}
       enabled: true,
       rounds: 1,
       outputVarName: "",
-      isEditTool: true
+      isEditTool: true,
+      omitWorldInfoAndPreset: false
     }
   ];
 }
@@ -6547,7 +6488,8 @@ function normalizeStep(step) {
     enabled,
     rounds,
     outputVarName: normalizeOutputVarName(step.outputVarName),
-    isEditTool: step.isEditTool === true
+    isEditTool: step.isEditTool === true,
+    omitWorldInfoAndPreset: step.omitWorldInfoAndPreset === true
   };
 }
 function normalizeWorkflow(workflow) {
@@ -6590,6 +6532,7 @@ function saveSettings() {
   const context = getContext();
   context.saveSettingsDebounced();
 }
+const QUIET_STAGE_TIMEOUT_MS = 10 * 60 * 1e3;
 const EDIT_TOOL_PROMPT_PREFIX = `你正在使用 Alyce 的内存资产增量编辑工具。
 本环节不要重写全文，只返回一个或多个 EDIT 块。
 
@@ -6614,7 +6557,10 @@ const runState = /* @__PURE__ */ reactive({
   lastScratch: null,
   currentStepId: null,
   stepStatuses: {},
-  modeUsed: null
+  modeUsed: null,
+  failedStepId: null,
+  failedRoundIndex: null,
+  canResume: false
 });
 function pushEvent(kind, title, body = "", meta = "") {
   const badgeMap = {
@@ -6636,8 +6582,20 @@ function pushEvent(kind, title, body = "", meta = "") {
 function setStepStatus(stepId, status) {
   runState.stepStatuses[stepId] = status;
 }
+function cloneScratchData(scratch) {
+  const outputs = {};
+  const sourceOutputs = (scratch == null ? void 0 : scratch.outputs) && typeof scratch.outputs === "object" ? scratch.outputs : {};
+  for (const [key, value] of Object.entries(sourceOutputs)) {
+    outputs[String(key)] = String(value ?? "");
+  }
+  return {
+    input: String((scratch == null ? void 0 : scratch.input) ?? ""),
+    outputs,
+    lastOutput: String((scratch == null ? void 0 : scratch.lastOutput) ?? "")
+  };
+}
 function syncRunArtifacts(scratch) {
-  runState.lastScratch = structuredClone(scratch);
+  runState.lastScratch = cloneScratchData(scratch);
   runState.finalOutput = resolveFinalOutput(scratch) || scratch.lastOutput;
 }
 function resetRunState(modeUsed, inputText) {
@@ -6651,9 +6609,17 @@ function resetRunState(modeUsed, inputText) {
   runState.currentStepId = null;
   runState.stepStatuses = {};
   runState.modeUsed = modeUsed;
+  runState.failedStepId = null;
+  runState.failedRoundIndex = null;
+  runState.canResume = false;
   for (const step of settingsState.workflow) {
     runState.stepStatuses[step.id] = step.enabled === false ? "skipped" : "pending";
   }
+}
+function clearResumePoint() {
+  runState.failedStepId = null;
+  runState.failedRoundIndex = null;
+  runState.canResume = false;
 }
 function buildInterpolationMap(step, scratch, extra = {}) {
   return {
@@ -6829,16 +6795,34 @@ function resolveFinalOutput(scratch) {
 async function tick() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
+function withQuietStageTimeout(promise, step) {
+  let timeoutId = null;
+  const timeout = new Promise((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`「${step.title}」静默生成超过 10 分钟未返回，已停止等待。`));
+    }, QUIET_STAGE_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  });
+}
 async function runQuietStage(step, scratch, options = {}) {
   const context = getContext();
   const promptTemplate = buildStepPromptTemplate(step, scratch);
   const prompt = interpolateTemplate(promptTemplate, buildInterpolationMap(step, scratch, options));
-  const result = await context.generateQuietPrompt({
+  const generation = step.omitWorldInfoAndPreset === true ? context.generateRaw({
+    prompt,
+    quietToLoud: true,
+    trimNames: false
+  }) : context.generateQuietPrompt({
     quietPrompt: prompt,
     quietToLoud: true,
     skipWIAN: true
     // 避免一些无关注入
   });
+  const result = await withQuietStageTimeout(generation, step);
   return String(result ?? "").trim();
 }
 function getRunnableWorkflow() {
@@ -6867,7 +6851,8 @@ async function finalizeAssistantOutput(output, modeUsed, scratch) {
         title: step.title,
         rounds: step.rounds,
         outputVarName: step.outputVarName || void 0,
-        isEditTool: step.isEditTool === true
+        isEditTool: step.isEditTool === true,
+        omitWorldInfoAndPreset: step.omitWorldInfoAndPreset === true
       })),
       finalOutputTemplate: settingsState.finalOutputTemplate,
       generatedAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -6875,10 +6860,89 @@ async function finalizeAssistantOutput(output, modeUsed, scratch) {
   }
   await context.saveChat();
   runState.finalOutput = output;
-  runState.lastScratch = scratch;
+  runState.lastScratch = cloneScratchData(scratch);
   runState.status = "Alyce 已完成，并把最终答案写回聊天。";
   runState.statusKind = "idle";
   runState.isRunning = false;
+  runState.currentStepId = null;
+  clearResumePoint();
+}
+async function finalizeScratch(scratch, modeUsed) {
+  runState.currentStepId = null;
+  clearResumePoint();
+  const finalOutput = resolveFinalOutput(scratch);
+  if (!String(finalOutput).trim()) {
+    throw new Error("Alyce 生成了空的最终结果。");
+  }
+  await finalizeAssistantOutput(finalOutput, modeUsed, scratch);
+}
+async function executeWorkflowFrom(scratch, modeUsed, options = {}) {
+  const runnableWorkflow = getRunnableWorkflow();
+  const assetNameMap = buildAssetNameMap(runnableWorkflow);
+  let reachedStart = !options.startStepId;
+  for (const step of runnableWorkflow) {
+    if (!reachedStart) {
+      if (step.id !== options.startStepId) {
+        continue;
+      }
+      reachedStart = true;
+    }
+    runState.currentStepId = step.id;
+    setStepStatus(step.id, "in_progress");
+    runState.status = `正在执行${step.title}...`;
+    await tick();
+    const rounds = step.rounds && step.rounds > 1 ? step.rounds : 1;
+    const firstRound = step.id === options.startStepId ? Math.min(rounds, Math.max(1, options.startRoundIndex || 1)) : 1;
+    for (let index = firstRound; index <= rounds; index++) {
+      runState.failedStepId = step.id;
+      runState.failedRoundIndex = index;
+      const rawOutput = await runQuietStage(step, scratch, { revisionIndex: index, revisionCount: rounds });
+      let output = rawOutput;
+      let meta = step.description || "已完成";
+      if (step.isEditTool === true) {
+        const editResult = applyAssetEdit(rawOutput, scratch, getStepOutputVarName(step, assetNameMap));
+        scratch.outputs = editResult.outputs;
+        scratch.lastOutput = editResult.lastOutput;
+        output = scratch.lastOutput;
+        const editedSummary = editResult.editedVarNames.length ? `已应用 ${editResult.appliedCount} 处编辑：${editResult.editedVarNames.map((name) => `{{${name}}}`).join("、")}` : "未应用编辑";
+        const skippedSummary = editResult.skippedEdits.length ? ` · 已跳过 ${editResult.skippedEdits.length} 处：${editResult.skippedEdits.join("；")}` : "";
+        meta = `${meta} · ${editedSummary}${skippedSummary}`;
+        pushEvent(
+          editResult.skippedEdits.length ? "error" : "tool",
+          editResult.skippedEdits.length ? "增量编辑部分跳过" : "增量编辑已应用",
+          rawOutput,
+          `匹配 ${editResult.matchCount} 处，更新 ${editResult.editedVarNames.join(", ") || "无"}${skippedSummary}`
+        );
+      } else {
+        const outputVarName = saveStepOutput(step, scratch, rawOutput, assetNameMap);
+        meta = step.description || `已保存为 {{${outputVarName}}}`;
+      }
+      const phaseTitle = rounds > 1 ? `${step.title} ${index}/${rounds}` : step.title;
+      pushEvent("thinking", phaseTitle, output, meta || "该环节已执行。");
+      await tick();
+    }
+    syncRunArtifacts(scratch);
+    setStepStatus(step.id, "completed");
+    await tick();
+  }
+  if (!reachedStart && options.startStepId) {
+    throw new Error("找不到可继续的工作流环节，请重新开始本轮 Alyce。");
+  }
+  await finalizeScratch(scratch, modeUsed);
+}
+function handleWorkflowFailure(error, scratch) {
+  if (runState.failedStepId) {
+    setStepStatus(runState.failedStepId, "error");
+  }
+  runState.currentStepId = null;
+  runState.isRunning = false;
+  runState.statusKind = "error";
+  runState.status = (error == null ? void 0 : error.message) ? `Alyce 失败：${error.message}` : "Alyce 失败。";
+  syncRunArtifacts(scratch);
+  runState.canResume = Boolean(String(scratch.input || "").trim());
+  pushEvent("error", "运行失败", (error == null ? void 0 : error.message) || String(error), "可以点击继续从中断处恢复，或点击重新开始从头再跑一次。");
+  console.error("[Alyce]", error);
+  toastr.error((error == null ? void 0 : error.message) || "Alyce 运行失败。");
 }
 async function runAlyceTurn(inputText, modeUsed, options = {}) {
   if (runState.isRunning) {
@@ -6918,71 +6982,65 @@ async function runAlyceTurn(inputText, modeUsed, options = {}) {
       pushEvent("system", "已接管当前楼层生成", "Alyce 正在后台执行多阶段流程。", "最终回复会作为正常 assistant 消息写回当前聊天楼层。");
     }
     await tick();
-    const runnableWorkflow = getRunnableWorkflow();
-    const assetNameMap = buildAssetNameMap(runnableWorkflow);
-    for (const step of runnableWorkflow) {
-      runState.currentStepId = step.id;
-      setStepStatus(step.id, "in_progress");
-      runState.status = `正在执行${step.title}...`;
-      await tick();
-      const rounds = step.rounds && step.rounds > 1 ? step.rounds : 1;
-      for (let index = 1; index <= rounds; index++) {
-        const rawOutput = await runQuietStage(step, scratch, { revisionIndex: index, revisionCount: rounds });
-        let output = rawOutput;
-        let meta = step.description || "已完成";
-        if (step.isEditTool === true) {
-          const editResult = applyAssetEdit(rawOutput, scratch, getStepOutputVarName(step, assetNameMap));
-          scratch.outputs = editResult.outputs;
-          scratch.lastOutput = editResult.lastOutput;
-          output = scratch.lastOutput;
-          const editedSummary = editResult.editedVarNames.length ? `已应用 ${editResult.appliedCount} 处编辑：${editResult.editedVarNames.map((name) => `{{${name}}}`).join("、")}` : "未应用编辑";
-          const skippedSummary = editResult.skippedEdits.length ? ` · 已跳过 ${editResult.skippedEdits.length} 处：${editResult.skippedEdits.join("；")}` : "";
-          meta = `${meta} · ${editedSummary}${skippedSummary}`;
-          pushEvent(
-            editResult.skippedEdits.length ? "error" : "tool",
-            editResult.skippedEdits.length ? "增量编辑部分跳过" : "增量编辑已应用",
-            rawOutput,
-            `匹配 ${editResult.matchCount} 处，更新 ${editResult.editedVarNames.join(", ") || "无"}${skippedSummary}`
-          );
-        } else {
-          const outputVarName = saveStepOutput(step, scratch, rawOutput, assetNameMap);
-          meta = step.description || `已保存为 {{${outputVarName}}}`;
-        }
-        const phaseTitle = rounds > 1 ? `${step.title} ${index}/${rounds}` : step.title;
-        pushEvent("thinking", phaseTitle, output, meta || "该环节已执行。");
-        await tick();
-      }
-      syncRunArtifacts(scratch);
-      setStepStatus(step.id, "completed");
-      await tick();
-    }
-    runState.currentStepId = null;
-    const finalOutput = resolveFinalOutput(scratch);
-    if (!String(finalOutput).trim()) {
-      throw new Error("Alyce 生成了空的最终结果。");
-    }
-    await finalizeAssistantOutput(finalOutput, modeUsed, scratch);
+    await executeWorkflowFrom(scratch, modeUsed);
     toastr.success("Alyce 已完成本轮处理。");
   } catch (error) {
-    runState.currentStepId = null;
-    runState.isRunning = false;
-    runState.statusKind = "error";
-    runState.status = (error == null ? void 0 : error.message) ? `Alyce 失败：${error.message}` : "Alyce 失败。";
-    syncRunArtifacts(scratch);
-    pushEvent("error", "运行失败", (error == null ? void 0 : error.message) || String(error), "如有需要，请到浏览器控制台查看详细信息。");
-    console.error("[Alyce]", error);
-    toastr.error((error == null ? void 0 : error.message) || "Alyce 运行失败。");
+    handleWorkflowFailure(error, scratch);
   }
 }
-function getToolCallingSnapshot() {
-  const context = getContext();
-  const quietTools = typeof context.canPerformToolCalls === "function" ? context.canPerformToolCalls("quiet") : false;
-  const liveTools = typeof context.canPerformToolCalls === "function" ? context.canPerformToolCalls("normal") : false;
-  return {
-    quietTools,
-    liveTools,
-    note: quietTools ? "当前后端允许在静默运行阶段执行工具调用。" : "静默运行会继承当前 API，但这里的静默生成暂时不能直接执行工具调用，所以代理模式目前侧重可视化编排、状态展示和继续控制。"
-  };
+async function resumeAlyceTurn() {
+  if (runState.isRunning) {
+    toastr.info("Alyce 正在处理中。");
+    return;
+  }
+  if (!runState.canResume || !runState.lastScratch) {
+    toastr.warning("当前没有可以继续的 Alyce 运行。");
+    return;
+  }
+  if (!ensureChatContext()) return;
+  if (!settingsState.workflow.some((step) => step.enabled !== false)) {
+    toastr.warning("请至少启用一个 Alyce 环节。");
+    return;
+  }
+  const failedStepId = runState.failedStepId;
+  const failedRoundIndex = runState.failedRoundIndex || 1;
+  const modeUsed = runState.modeUsed || settingsState.mode;
+  const scratch = cloneScratchData(runState.lastScratch);
+  runState.isRunning = true;
+  runState.statusKind = "running";
+  runState.status = "Alyce 正在从中断处继续。";
+  runState.canResume = false;
+  await tick();
+  try {
+    if (failedStepId) {
+      const failedStep = getRunnableWorkflow().find((step) => step.id === failedStepId);
+      if (!failedStep) {
+        throw new Error("找不到可继续的工作流环节，请重新开始本轮 Alyce。");
+      }
+      pushEvent("system", "继续执行", `从「${failedStep.title}」第 ${failedRoundIndex} 轮继续。`, "已保留中断前完成的资产。");
+      await tick();
+      await executeWorkflowFrom(scratch, modeUsed, { startStepId: failedStepId, startRoundIndex: failedRoundIndex });
+    } else {
+      pushEvent("system", "继续写回最终输出", "工作流环节已经完成，正在重新尝试写回最终输出。", "已保留中断前完成的资产。");
+      await tick();
+      await finalizeScratch(scratch, modeUsed);
+    }
+    toastr.success("Alyce 已继续完成本轮处理。");
+  } catch (error) {
+    handleWorkflowFailure(error, scratch);
+  }
+}
+async function restartAlyceTurn() {
+  if (runState.isRunning) {
+    toastr.info("Alyce 正在处理中。");
+    return;
+  }
+  const input = String(runState.lastInput || "").trim();
+  if (!input) {
+    toastr.warning("当前没有可以重新开始的 Alyce 输入。");
+    return;
+  }
+  await runAlyceTurn(input, runState.modeUsed || settingsState.mode, { messageAlreadySent: true });
 }
 function getConnectionSnapshot() {
   var _a, _b, _c, _d;
@@ -7059,6 +7117,7 @@ const _sfc_main$3 = /* @__PURE__ */ defineComponent({
             "is-selected": __props.isSelected,
             "is-current": __props.isCurrent,
             "is-completed": __props.status === "completed",
+            "is-error": __props.status === "error",
             "is-disabled": __props.step.enabled === false
           }]),
           onClick: _cache[0] || (_cache[0] = ($event) => _ctx.$emit("select", __props.step.id))
@@ -7095,8 +7154,11 @@ const _hoisted_16$1 = ["value"];
 const _hoisted_17$1 = { class: "alyce__field alyce__field--toggle" };
 const _hoisted_18$1 = { class: "alyce__toggle" };
 const _hoisted_19$1 = ["checked"];
-const _hoisted_20$1 = { class: "alyce__field alyce__field--full" };
-const _hoisted_21$1 = ["value"];
+const _hoisted_20$1 = { class: "alyce__field alyce__field--toggle" };
+const _hoisted_21$1 = { class: "alyce__toggle" };
+const _hoisted_22$1 = ["checked"];
+const _hoisted_23$1 = { class: "alyce__field alyce__field--full" };
+const _hoisted_24$1 = ["value"];
 const _sfc_main$2 = /* @__PURE__ */ defineComponent({
   __name: "PromptEditor",
   props: {
@@ -7131,6 +7193,10 @@ const _sfc_main$2 = /* @__PURE__ */ defineComponent({
       props.step.isEditTool = enabled;
       saveSettings();
     }
+    function updateOmitWorldInfoAndPreset(enabled) {
+      props.step.omitWorldInfoAndPreset = enabled;
+      saveSettings();
+    }
     function updatePrompt(prompt) {
       props.step.prompt = prompt;
       saveSettings();
@@ -7138,7 +7204,7 @@ const _sfc_main$2 = /* @__PURE__ */ defineComponent({
     return (_ctx, _cache) => {
       return openBlock(), createElementBlock(Fragment, null, [
         createBaseVNode("div", _hoisted_1$2, [
-          _cache[7] || (_cache[7] = createBaseVNode("div", { class: "alyce__editorEyebrow" }, "当前环节", -1)),
+          _cache[8] || (_cache[8] = createBaseVNode("div", { class: "alyce__editorEyebrow" }, "当前环节", -1)),
           createBaseVNode("div", _hoisted_2$2, [
             createBaseVNode("div", _hoisted_3$2, [
               createBaseVNode("strong", _hoisted_4$2, toDisplayString(__props.step.title), 1)
@@ -7157,12 +7223,12 @@ const _sfc_main$2 = /* @__PURE__ */ defineComponent({
                 checked: __props.step.enabled !== false,
                 onChange: _cache[0] || (_cache[0] = ($event) => updateEnabled($event.target.checked))
               }, null, 40, _hoisted_8$1),
-              _cache[8] || (_cache[8] = createBaseVNode("span", null, "启用当前环节", -1))
+              _cache[9] || (_cache[9] = createBaseVNode("span", null, "启用当前环节", -1))
             ]),
-            _cache[9] || (_cache[9] = createBaseVNode("p", { class: "alyce__note" }, "关闭后，这个模块会在本轮 Alyce 编排里跳过。", -1))
+            _cache[10] || (_cache[10] = createBaseVNode("p", { class: "alyce__note" }, "关闭后，这个模块会在本轮 Alyce 编排里跳过。", -1))
           ]),
           createBaseVNode("div", _hoisted_9$1, [
-            _cache[10] || (_cache[10] = createBaseVNode("label", null, "环节标题", -1)),
+            _cache[11] || (_cache[11] = createBaseVNode("label", null, "环节标题", -1)),
             createBaseVNode("input", {
               type: "text",
               "data-macros-autocomplete": "hide",
@@ -7171,7 +7237,7 @@ const _sfc_main$2 = /* @__PURE__ */ defineComponent({
             }, null, 40, _hoisted_10$1)
           ]),
           createBaseVNode("div", _hoisted_11$1, [
-            _cache[11] || (_cache[11] = createBaseVNode("label", null, "环节标注", -1)),
+            _cache[12] || (_cache[12] = createBaseVNode("label", null, "环节标注", -1)),
             createBaseVNode("input", {
               type: "text",
               "data-macros-autocomplete": "hide",
@@ -7180,7 +7246,7 @@ const _sfc_main$2 = /* @__PURE__ */ defineComponent({
             }, null, 40, _hoisted_12$1)
           ]),
           createBaseVNode("div", _hoisted_13$1, [
-            _cache[12] || (_cache[12] = createBaseVNode("label", null, "循环轮次", -1)),
+            _cache[13] || (_cache[13] = createBaseVNode("label", null, "循环轮次", -1)),
             createBaseVNode("input", {
               type: "number",
               min: "1",
@@ -7190,10 +7256,10 @@ const _sfc_main$2 = /* @__PURE__ */ defineComponent({
               value: __props.step.rounds ?? 1,
               onInput: _cache[3] || (_cache[3] = ($event) => updateRounds(Number($event.target.value)))
             }, null, 40, _hoisted_14$1),
-            _cache[13] || (_cache[13] = createBaseVNode("p", { class: "alyce__note" }, "当前环节连续执行的次数。", -1))
+            _cache[14] || (_cache[14] = createBaseVNode("p", { class: "alyce__note" }, "当前环节连续执行的次数。", -1))
           ]),
           createBaseVNode("div", _hoisted_15$1, [
-            _cache[14] || (_cache[14] = createBaseVNode("label", null, "输出变量名", -1)),
+            _cache[15] || (_cache[15] = createBaseVNode("label", null, "输出变量名", -1)),
             createBaseVNode("input", {
               type: "text",
               "data-macros-autocomplete": "hide",
@@ -7201,7 +7267,7 @@ const _sfc_main$2 = /* @__PURE__ */ defineComponent({
               value: __props.step.outputVarName || "",
               onInput: _cache[4] || (_cache[4] = ($event) => updateOutputVarName($event.target.value))
             }, null, 40, _hoisted_16$1),
-            _cache[15] || (_cache[15] = createBaseVNode("p", { class: "alyce__note" }, "留空时使用环节标题作为资产名；可在后续模板中用同名宏引用。", -1))
+            _cache[16] || (_cache[16] = createBaseVNode("p", { class: "alyce__note" }, "留空时使用环节标题作为资产名；可在后续模板中用同名宏引用。", -1))
           ]),
           createBaseVNode("div", _hoisted_17$1, [
             createBaseVNode("label", _hoisted_18$1, [
@@ -7210,19 +7276,30 @@ const _sfc_main$2 = /* @__PURE__ */ defineComponent({
                 checked: __props.step.isEditTool === true,
                 onChange: _cache[5] || (_cache[5] = ($event) => updateIsEditTool($event.target.checked))
               }, null, 40, _hoisted_19$1),
-              _cache[16] || (_cache[16] = createBaseVNode("span", null, "启用编辑工具", -1))
+              _cache[17] || (_cache[17] = createBaseVNode("span", null, "启用编辑工具", -1))
             ]),
-            _cache[17] || (_cache[17] = createBaseVNode("p", { class: "alyce__note" }, "开启后，运行时会自动在模板顶部注入 EDIT 工具说明，并让 AI 可以调用编辑工具。", -1))
+            _cache[18] || (_cache[18] = createBaseVNode("p", { class: "alyce__note" }, "开启后，运行时会自动在模板顶部注入 EDIT 工具说明，并让 AI 可以调用编辑工具。", -1))
+          ]),
+          createBaseVNode("div", _hoisted_20$1, [
+            createBaseVNode("label", _hoisted_21$1, [
+              createBaseVNode("input", {
+                type: "checkbox",
+                checked: __props.step.omitWorldInfoAndPreset === true,
+                onChange: _cache[6] || (_cache[6] = ($event) => updateOmitWorldInfoAndPreset($event.target.checked))
+              }, null, 40, _hoisted_22$1),
+              _cache[19] || (_cache[19] = createBaseVNode("span", null, "不发送世界书/预设", -1))
+            ]),
+            _cache[20] || (_cache[20] = createBaseVNode("p", { class: "alyce__note" }, "开启后，这个环节只发送当前提示词与已有资产，不继承 SillyTavern 的世界书、预设提示词和聊天上下文。", -1))
           ])
         ]),
-        createBaseVNode("div", _hoisted_20$1, [
-          _cache[18] || (_cache[18] = createBaseVNode("label", null, "提示词模板", -1)),
+        createBaseVNode("div", _hoisted_23$1, [
+          _cache[21] || (_cache[21] = createBaseVNode("label", null, "提示词模板", -1)),
           createBaseVNode("textarea", {
             "data-macros-autocomplete": "hide",
             rows: "12",
             value: __props.step.prompt,
-            onInput: _cache[6] || (_cache[6] = ($event) => updatePrompt($event.target.value))
-          }, null, 40, _hoisted_21$1)
+            onInput: _cache[7] || (_cache[7] = ($event) => updatePrompt($event.target.value))
+          }, null, 40, _hoisted_24$1)
         ])
       ], 64);
     };
@@ -7315,46 +7392,48 @@ const _hoisted_30 = {
   key: 1,
   class: "alyce__streamMeta"
 };
-const _hoisted_31 = { class: "alyce__composer" };
-const _hoisted_32 = { class: "alyce__panel alyce__panel--agentSide" };
-const _hoisted_33 = { class: "alyce__statusBar" };
-const _hoisted_34 = { class: "alyce__statusGrid" };
-const _hoisted_35 = { class: "alyce__statusItem" };
-const _hoisted_36 = { class: "alyce__statusItemValue" };
-const _hoisted_37 = { class: "alyce__statusItem" };
-const _hoisted_38 = { class: "alyce__statusItemValue" };
-const _hoisted_39 = { class: "alyce__statusItem" };
-const _hoisted_40 = { class: "alyce__statusItemValue" };
-const _hoisted_41 = { class: "alyce__statusItem" };
-const _hoisted_42 = { class: "alyce__statusItemValue" };
-const _hoisted_43 = { class: "alyce__statusItem" };
-const _hoisted_44 = { class: "alyce__statusItemValue" };
-const _hoisted_45 = { class: "alyce__statusItem" };
-const _hoisted_46 = { class: "alyce__statusItemValue" };
-const _hoisted_47 = { class: "alyce__statusCurrent" };
-const _hoisted_48 = { class: "alyce__statusCurrentBody" };
-const _hoisted_49 = { class: "alyce__todoPanel" };
-const _hoisted_50 = { class: "alyce__todoHead" };
-const _hoisted_51 = { class: "alyce__todoState" };
-const _hoisted_52 = { class: "alyce__todoMeta" };
-const _hoisted_53 = { class: "alyce__detailsPanel" };
-const _hoisted_54 = { class: "alyce__detailCard" };
-const _hoisted_55 = { class: "alyce__detailBody" };
-const _hoisted_56 = { class: "alyce__detailCard" };
-const _hoisted_57 = { class: "alyce__detailBody" };
+const _hoisted_31 = {
+  key: 0,
+  class: "alyce__composer alyce__resumePanel"
+};
+const _hoisted_32 = { class: "alyce__composerActions" };
+const _hoisted_33 = ["disabled"];
+const _hoisted_34 = ["disabled"];
+const _hoisted_35 = { class: "alyce__panel alyce__panel--agentSide" };
+const _hoisted_36 = { class: "alyce__statusBar" };
+const _hoisted_37 = { class: "alyce__statusGrid" };
+const _hoisted_38 = { class: "alyce__statusItem" };
+const _hoisted_39 = { class: "alyce__statusItemValue" };
+const _hoisted_40 = { class: "alyce__statusItem" };
+const _hoisted_41 = { class: "alyce__statusItemValue" };
+const _hoisted_42 = { class: "alyce__statusItem" };
+const _hoisted_43 = { class: "alyce__statusItemValue" };
+const _hoisted_44 = { class: "alyce__statusItem" };
+const _hoisted_45 = { class: "alyce__statusItemValue" };
+const _hoisted_46 = { class: "alyce__statusItem" };
+const _hoisted_47 = { class: "alyce__statusItemValue" };
+const _hoisted_48 = { class: "alyce__statusItem" };
+const _hoisted_49 = { class: "alyce__statusItemValue" };
+const _hoisted_50 = { class: "alyce__statusCurrent" };
+const _hoisted_51 = { class: "alyce__statusCurrentBody" };
+const _hoisted_52 = { class: "alyce__todoPanel" };
+const _hoisted_53 = { class: "alyce__todoHead" };
+const _hoisted_54 = { class: "alyce__todoState" };
+const _hoisted_55 = { class: "alyce__todoMeta" };
+const _hoisted_56 = { class: "alyce__detailsPanel" };
+const _hoisted_57 = { class: "alyce__detailCard" };
+const _hoisted_58 = { class: "alyce__detailBody" };
 const _sfc_main = /* @__PURE__ */ defineComponent({
   __name: "App",
   setup(__props) {
     var _a;
     const connectionSnapshot = computed(() => getConnectionSnapshot());
-    const toolCallingSnapshot = computed(() => getToolCallingSnapshot());
     const selectedStepId = /* @__PURE__ */ ref(((_a = settingsState.workflow[0]) == null ? void 0 : _a.id) || null);
     const selectedStep = computed(() => settingsState.workflow.find((s) => s.id === selectedStepId.value));
     const isRunning = computed(() => runState.statusKind === "running");
     const isError = computed(() => runState.statusKind === "error");
     const currentStatus = computed(() => runState.status || (settingsState.enabled ? ENABLED_IDLE_STATUS : DEFAULT_STATUS));
     const streamContainer = /* @__PURE__ */ ref(null);
-    const agentInput = /* @__PURE__ */ ref("");
     const completedTasks = computed(() => Object.values(runState.stepStatuses).filter((s) => s === "completed").length);
     const totalTasks = computed(() => settingsState.workflow.filter((s) => s.enabled !== false).length);
     watch(() => runState.events.length, (newLength, oldLength) => {
@@ -7405,6 +7484,7 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
       const status = runState.stepStatuses[step.id] || "pending";
       if (status === "completed") return "完成";
       if (status === "in_progress") return "进行中";
+      if (status === "error") return "中断";
       return "待执行";
     }
     function getTodoMeta(step) {
@@ -7416,14 +7496,11 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
       if (step.rounds && step.rounds > 1) return `${step.rounds} 轮循环`;
       return step.description || "环节";
     }
-    async function handleAgentSend() {
-      const prompt = agentInput.value.trim();
-      if (!prompt) {
-        toastr.warning("请输入要发送给 AI 的内容。");
-        return;
-      }
-      await runAlyceTurn(prompt, "agent");
-      agentInput.value = "";
+    async function handleResumeRun() {
+      await resumeAlyceTurn();
+    }
+    async function handleRestartRun() {
+      await restartAlyceTurn();
     }
     function updateFinalOutputTemplate(template) {
       settingsState.finalOutputTemplate = template.trim().length > 0 ? template : DEFAULT_FINAL_OUTPUT_TEMPLATE;
@@ -7461,7 +7538,7 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
     return (_ctx, _cache) => {
       return openBlock(), createElementBlock("div", _hoisted_1, [
         createBaseVNode("div", _hoisted_2, [
-          _cache[29] || (_cache[29] = createBaseVNode("div", { class: "alyce__hero" }, [
+          _cache[26] || (_cache[26] = createBaseVNode("div", { class: "alyce__hero" }, [
             createBaseVNode("div", { class: "alyce__heroCopy" }, [
               createBaseVNode("div", { class: "alyce__eyebrow" }, "多阶段工作流"),
               createBaseVNode("h2", { class: "alyce__title" }, "Alyce")
@@ -7469,23 +7546,23 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
           ], -1)),
           createBaseVNode("div", _hoisted_3, [
             createBaseVNode("div", _hoisted_4, [
-              _cache[4] || (_cache[4] = createBaseVNode("span", { class: "alyce__chipLabel" }, "接管", -1)),
+              _cache[3] || (_cache[3] = createBaseVNode("span", { class: "alyce__chipLabel" }, "接管", -1)),
               createBaseVNode("strong", null, toDisplayString(unref(settingsState).enabled ? "已启用" : "未启用"), 1)
             ]),
             createBaseVNode("div", _hoisted_5, [
-              _cache[5] || (_cache[5] = createBaseVNode("span", { class: "alyce__chipLabel" }, "接口", -1)),
+              _cache[4] || (_cache[4] = createBaseVNode("span", { class: "alyce__chipLabel" }, "接口", -1)),
               createBaseVNode("strong", null, toDisplayString(connectionSnapshot.value.api), 1)
             ]),
             createBaseVNode("div", _hoisted_6, [
-              _cache[6] || (_cache[6] = createBaseVNode("span", { class: "alyce__chipLabel" }, "来源", -1)),
+              _cache[5] || (_cache[5] = createBaseVNode("span", { class: "alyce__chipLabel" }, "来源", -1)),
               createBaseVNode("strong", null, toDisplayString(connectionSnapshot.value.source), 1)
             ]),
             createBaseVNode("div", _hoisted_7, [
-              _cache[7] || (_cache[7] = createBaseVNode("span", { class: "alyce__chipLabel" }, "模型", -1)),
+              _cache[6] || (_cache[6] = createBaseVNode("span", { class: "alyce__chipLabel" }, "模型", -1)),
               createBaseVNode("strong", null, toDisplayString(connectionSnapshot.value.model), 1)
             ]),
             createBaseVNode("div", _hoisted_8, [
-              _cache[8] || (_cache[8] = createBaseVNode("span", { class: "alyce__chipLabel" }, "预设", -1)),
+              _cache[7] || (_cache[7] = createBaseVNode("span", { class: "alyce__chipLabel" }, "预设", -1)),
               createBaseVNode("strong", null, toDisplayString(connectionSnapshot.value.preset), 1)
             ])
           ]),
@@ -7495,7 +7572,7 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
           }, toDisplayString(currentStatus.value), 3),
           withDirectives(createBaseVNode("div", _hoisted_9, [
             createBaseVNode("section", _hoisted_10, [
-              _cache[9] || (_cache[9] = createBaseVNode("div", { class: "alyce__panelHeader" }, [
+              _cache[8] || (_cache[8] = createBaseVNode("div", { class: "alyce__panelHeader" }, [
                 createBaseVNode("h3", null, "工作流轨道"),
                 createBaseVNode("p", null, "方块节点表示这一次的隐藏执行链。你可以按加号插入新环节，或者点击节点编辑/删除。")
               ], -1)),
@@ -7528,7 +7605,7 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
             ]),
             createBaseVNode("div", _hoisted_13, [
               createBaseVNode("section", _hoisted_14, [
-                _cache[12] || (_cache[12] = createBaseVNode("div", { class: "alyce__panelHeader alyce__panelHeader--left" }, [
+                _cache[11] || (_cache[11] = createBaseVNode("div", { class: "alyce__panelHeader alyce__panelHeader--left" }, [
                   createBaseVNode("h3", null, "环节编辑器"),
                   createBaseVNode("p", null, "编辑当前选中环节的提示词与启用状态。整改轮数改为在整改模块内单独设置，最终输出仍只会回到聊天楼层。")
                 ], -1)),
@@ -7540,7 +7617,7 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
                   }, null, 8, ["step"])) : (openBlock(), createElementBlock("p", _hoisted_16, "当前没有选中的环节。"))
                 ]),
                 createBaseVNode("div", _hoisted_17, [
-                  _cache[10] || (_cache[10] = createBaseVNode("label", { for: "alyce_final_output_template" }, "最终输出模板", -1)),
+                  _cache[9] || (_cache[9] = createBaseVNode("label", { for: "alyce_final_output_template" }, "最终输出模板", -1)),
                   createBaseVNode("textarea", {
                     id: "alyce_final_output_template",
                     "data-macros-autocomplete": "hide",
@@ -7548,7 +7625,7 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
                     value: unref(settingsState).finalOutputTemplate,
                     onInput: _cache[2] || (_cache[2] = ($event) => updateFinalOutputTemplate($event.target.value))
                   }, null, 40, _hoisted_18),
-                  _cache[11] || (_cache[11] = createBaseVNode("p", null, [
+                  _cache[10] || (_cache[10] = createBaseVNode("p", null, [
                     createTextVNode("可组合多个资产宏，例如 "),
                     createBaseVNode("code", null, "{{摘要}}"),
                     createTextVNode(" 与 "),
@@ -7566,7 +7643,7 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
               createBaseVNode("section", _hoisted_21, [
                 createBaseVNode("div", _hoisted_22, [
                   createBaseVNode("div", _hoisted_23, [
-                    _cache[13] || (_cache[13] = createBaseVNode("h3", null, "进度事件流", -1)),
+                    _cache[12] || (_cache[12] = createBaseVNode("h3", null, "进度事件流", -1)),
                     unref(runState).events.length ? (openBlock(), createElementBlock("button", {
                       key: 0,
                       type: "button",
@@ -7575,16 +7652,16 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
                       onClick: clearEvents
                     }, " 清空全部 ")) : createCommentVNode("", true)
                   ]),
-                  _cache[14] || (_cache[14] = createBaseVNode("p", null, "参考本地 AlyceAgent 的终端信息架构，实时展示事件、状态与继续入口。最终回复会直接写回聊天，而不是停留在工作台。", -1))
+                  _cache[13] || (_cache[13] = createBaseVNode("p", null, "参考本地 AlyceAgent 的终端信息架构，实时展示事件、状态与继续入口。最终回复会直接写回聊天，而不是停留在工作台。", -1))
                 ]),
                 createBaseVNode("div", {
                   class: "alyce__agentStream",
                   ref_key: "streamContainer",
                   ref: streamContainer
                 }, [
-                  !unref(runState).events.length ? (openBlock(), createElementBlock("div", _hoisted_24, [..._cache[15] || (_cache[15] = [
+                  !unref(runState).events.length ? (openBlock(), createElementBlock("div", _hoisted_24, [..._cache[14] || (_cache[14] = [
                     createBaseVNode("strong", null, "还没有进度事件", -1),
-                    createBaseVNode("p", null, "先在聊天楼层发送一条消息，或在下方输入内容。事件会按执行顺序持续追加在这里。", -1)
+                    createBaseVNode("p", null, "先在聊天楼层发送一条消息。事件会按执行顺序持续追加在这里。", -1)
                   ])])) : (openBlock(true), createElementBlock(Fragment, { key: 1 }, renderList(unref(runState).events, (event, i) => {
                     return openBlock(), createElementBlock("article", {
                       key: i,
@@ -7601,7 +7678,7 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
                             class: "alyce__streamActionBtn",
                             onClick: withModifiers(($event) => zoomEvent(event), ["stop"]),
                             title: "放大查看"
-                          }, [..._cache[16] || (_cache[16] = [
+                          }, [..._cache[15] || (_cache[15] = [
                             createBaseVNode("i", { class: "fa-solid fa-magnifying-glass" }, null, -1)
                           ])], 8, _hoisted_27),
                           createBaseVNode("button", {
@@ -7609,7 +7686,7 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
                             class: "alyce__streamActionBtn alyce__streamActionBtn--danger",
                             onClick: withModifiers(($event) => deleteEvent(i), ["stop"]),
                             title: "删除此记录"
-                          }, [..._cache[17] || (_cache[17] = [
+                          }, [..._cache[16] || (_cache[16] = [
                             createBaseVNode("i", { class: "fa-solid fa-trash-can" }, null, -1)
                           ])], 8, _hoisted_28)
                         ])
@@ -7619,86 +7696,76 @@ const _sfc_main = /* @__PURE__ */ defineComponent({
                     ]);
                   }), 128))
                 ], 512),
-                createBaseVNode("div", _hoisted_31, [
-                  _cache[18] || (_cache[18] = createBaseVNode("label", {
-                    class: "alyce__composerLabel",
-                    for: "alyce_agent_input"
-                  }, "发送给 AI", -1)),
-                  withDirectives(createBaseVNode("textarea", {
-                    id: "alyce_agent_input",
-                    "data-macros-autocomplete": "hide",
-                    rows: "4",
-                    "onUpdate:modelValue": _cache[3] || (_cache[3] = ($event) => agentInput.value = $event)
-                  }, null, 512), [
-                    [vModelText, agentInput.value]
-                  ]),
-                  createBaseVNode("div", { class: "alyce__composerActions" }, [
+                unref(runState).statusKind === "error" && unref(runState).canResume ? (openBlock(), createElementBlock("div", _hoisted_31, [
+                  createBaseVNode("div", _hoisted_32, [
                     createBaseVNode("button", {
                       class: "menu_button",
-                      onClick: handleAgentSend
-                    }, "发送")
+                      disabled: unref(runState).isRunning,
+                      onClick: handleResumeRun
+                    }, "继续", 8, _hoisted_33),
+                    createBaseVNode("button", {
+                      class: "menu_button alyce__secondaryAction",
+                      disabled: unref(runState).isRunning,
+                      onClick: handleRestartRun
+                    }, "重新开始", 8, _hoisted_34)
                   ])
-                ])
+                ])) : createCommentVNode("", true)
               ]),
-              createBaseVNode("section", _hoisted_32, [
-                _cache[28] || (_cache[28] = createBaseVNode("div", { class: "alyce__panelHeader alyce__panelHeader--left" }, [
+              createBaseVNode("section", _hoisted_35, [
+                _cache[25] || (_cache[25] = createBaseVNode("div", { class: "alyce__panelHeader alyce__panelHeader--left" }, [
                   createBaseVNode("h3", null, "进度侧栏"),
                   createBaseVNode("p", null, "状态栏、任务清单，以及当前最新工作内容。")
                 ], -1)),
-                createBaseVNode("div", _hoisted_33, [
-                  createBaseVNode("div", _hoisted_34, [
-                    createBaseVNode("div", _hoisted_35, [
-                      _cache[19] || (_cache[19] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "接管", -1)),
-                      createBaseVNode("div", _hoisted_36, toDisplayString(unref(settingsState).enabled ? "开启" : "关闭"), 1)
+                createBaseVNode("div", _hoisted_36, [
+                  createBaseVNode("div", _hoisted_37, [
+                    createBaseVNode("div", _hoisted_38, [
+                      _cache[17] || (_cache[17] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "接管", -1)),
+                      createBaseVNode("div", _hoisted_39, toDisplayString(unref(settingsState).enabled ? "开启" : "关闭"), 1)
                     ]),
-                    createBaseVNode("div", _hoisted_37, [
-                      _cache[20] || (_cache[20] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "模式", -1)),
-                      createBaseVNode("div", _hoisted_38, toDisplayString(unref(runState).modeUsed === "agent" || unref(settingsState).mode === "agent" ? "进度" : "工作流"), 1)
+                    createBaseVNode("div", _hoisted_40, [
+                      _cache[18] || (_cache[18] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "模式", -1)),
+                      createBaseVNode("div", _hoisted_41, toDisplayString(unref(runState).modeUsed === "agent" || unref(settingsState).mode === "agent" ? "进度" : "工作流"), 1)
                     ]),
-                    createBaseVNode("div", _hoisted_39, [
-                      _cache[21] || (_cache[21] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "任务", -1)),
-                      createBaseVNode("div", _hoisted_40, toDisplayString(completedTasks.value) + "/" + toDisplayString(totalTasks.value), 1)
+                    createBaseVNode("div", _hoisted_42, [
+                      _cache[19] || (_cache[19] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "任务", -1)),
+                      createBaseVNode("div", _hoisted_43, toDisplayString(completedTasks.value) + "/" + toDisplayString(totalTasks.value), 1)
                     ]),
-                    createBaseVNode("div", _hoisted_41, [
-                      _cache[22] || (_cache[22] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "接口", -1)),
-                      createBaseVNode("div", _hoisted_42, toDisplayString(connectionSnapshot.value.api), 1)
+                    createBaseVNode("div", _hoisted_44, [
+                      _cache[20] || (_cache[20] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "接口", -1)),
+                      createBaseVNode("div", _hoisted_45, toDisplayString(connectionSnapshot.value.api), 1)
                     ]),
-                    createBaseVNode("div", _hoisted_43, [
-                      _cache[23] || (_cache[23] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "来源", -1)),
-                      createBaseVNode("div", _hoisted_44, toDisplayString(connectionSnapshot.value.source), 1)
+                    createBaseVNode("div", _hoisted_46, [
+                      _cache[21] || (_cache[21] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "来源", -1)),
+                      createBaseVNode("div", _hoisted_47, toDisplayString(connectionSnapshot.value.source), 1)
                     ]),
-                    createBaseVNode("div", _hoisted_45, [
-                      _cache[24] || (_cache[24] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "模型", -1)),
-                      createBaseVNode("div", _hoisted_46, toDisplayString(connectionSnapshot.value.model), 1)
+                    createBaseVNode("div", _hoisted_48, [
+                      _cache[22] || (_cache[22] = createBaseVNode("div", { class: "alyce__statusItemLabel" }, "模型", -1)),
+                      createBaseVNode("div", _hoisted_49, toDisplayString(connectionSnapshot.value.model), 1)
                     ])
                   ]),
-                  createBaseVNode("div", _hoisted_47, [
-                    _cache[25] || (_cache[25] = createBaseVNode("div", { class: "alyce__statusCurrentLabel" }, "当前状态", -1)),
-                    createBaseVNode("div", _hoisted_48, toDisplayString(currentStatus.value), 1)
+                  createBaseVNode("div", _hoisted_50, [
+                    _cache[23] || (_cache[23] = createBaseVNode("div", { class: "alyce__statusCurrentLabel" }, "当前状态", -1)),
+                    createBaseVNode("div", _hoisted_51, toDisplayString(currentStatus.value), 1)
                   ])
                 ]),
-                createBaseVNode("div", _hoisted_49, [
+                createBaseVNode("div", _hoisted_52, [
                   (openBlock(true), createElementBlock(Fragment, null, renderList(unref(settingsState).workflow, (step) => {
                     return openBlock(), createElementBlock("div", {
                       key: "todo-" + step.id,
                       class: normalizeClass(["alyce__todoItem", `is-${getTodoStatusClass(step)}`])
                     }, [
-                      createBaseVNode("div", _hoisted_50, [
-                        createBaseVNode("span", _hoisted_51, toDisplayString(getTodoStatusLabel(step)), 1),
+                      createBaseVNode("div", _hoisted_53, [
+                        createBaseVNode("span", _hoisted_54, toDisplayString(getTodoStatusLabel(step)), 1),
                         createBaseVNode("strong", null, toDisplayString(step.title), 1)
                       ]),
-                      createBaseVNode("div", _hoisted_52, toDisplayString(getTodoMeta(step)), 1)
+                      createBaseVNode("div", _hoisted_55, toDisplayString(getTodoMeta(step)), 1)
                     ], 2);
                   }), 128))
                 ]),
-                createBaseVNode("div", _hoisted_53, [
-                  createBaseVNode("div", _hoisted_54, [
-                    _cache[26] || (_cache[26] = createBaseVNode("div", { class: "alyce__detailCardTitle" }, "执行说明", -1)),
-                    createBaseVNode("div", _hoisted_55, toDisplayString(unref(shorten)(toolCallingSnapshot.value.note, 500)), 1)
-                  ]),
-                  createBaseVNode("div", _hoisted_56, [
-                    _cache[27] || (_cache[27] = createBaseVNode("div", { class: "alyce__detailCardTitle" }, "当前状态", -1)),
-                    createBaseVNode("div", _hoisted_57, toDisplayString(currentStatus.value), 1)
+                createBaseVNode("div", _hoisted_56, [
+                  createBaseVNode("div", _hoisted_57, [
+                    _cache[24] || (_cache[24] = createBaseVNode("div", { class: "alyce__detailCardTitle" }, "当前状态", -1)),
+                    createBaseVNode("div", _hoisted_58, toDisplayString(currentStatus.value), 1)
                   ])
                 ])
               ])

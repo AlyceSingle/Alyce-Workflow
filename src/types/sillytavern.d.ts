@@ -23,7 +23,6 @@ declare module 'st-popup' {
 declare module 'st-context' {
     export function getContext(): {
         uuidv4?(): string;
-        canPerformToolCalls?(type: 'quiet' | 'normal'): boolean;
         mainApi?: string;
         chatCompletionSettings?: any;
         textCompletionSettings?: any;
@@ -34,6 +33,7 @@ declare module 'st-context' {
         chat: any[];
         saveSettingsDebounced(): void;
         generateQuietPrompt(options: { quietPrompt: string, quietToLoud?: boolean, skipWIAN?: boolean }): Promise<string>;
+        generateRaw(options: { prompt: string, quietToLoud?: boolean, trimNames?: boolean }): Promise<string>;
         saveChat(): Promise<void>;
     };
 }

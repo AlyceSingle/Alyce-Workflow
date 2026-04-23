@@ -20,6 +20,14 @@ interface AssetEditResult {
 }
 
 type AssetNameMap = Record<string, string>;
+type WorkflowMode = 'linear' | 'agent';
+
+interface WorkflowExecutionOptions {
+    startStepId?: string | null;
+    startRoundIndex?: number;
+}
+
+const QUIET_STAGE_TIMEOUT_MS = 10 * 60 * 1000;
 
 const EDIT_TOOL_PROMPT_PREFIX = `你正在使用 Alyce 的内存资产增量编辑工具。
 本环节不要重写全文，只返回一个或多个 EDIT 块。
@@ -47,6 +55,9 @@ export const runState = reactive<RunState>({
     currentStepId: null,
     stepStatuses: {},
     modeUsed: null,
+    failedStepId: null,
+    failedRoundIndex: null,
+    canResume: false,
 });
 
 export function pushEvent(kind: 'user' | 'thinking' | 'tool' | 'assistant' | 'error' | 'system', title: string, body = '', meta = '') {
@@ -72,8 +83,23 @@ export function setStepStatus(stepId: string, status: string) {
     runState.stepStatuses[stepId] = status;
 }
 
+function cloneScratchData(scratch: ScratchData | null): ScratchData {
+    const outputs: Record<string, string> = {};
+    const sourceOutputs = scratch?.outputs && typeof scratch.outputs === 'object' ? scratch.outputs : {};
+
+    for (const [key, value] of Object.entries(sourceOutputs)) {
+        outputs[String(key)] = String(value ?? '');
+    }
+
+    return {
+        input: String(scratch?.input ?? ''),
+        outputs,
+        lastOutput: String(scratch?.lastOutput ?? ''),
+    };
+}
+
 export function syncRunArtifacts(scratch: ScratchData) {
-    runState.lastScratch = structuredClone(scratch);
+    runState.lastScratch = cloneScratchData(scratch);
     runState.finalOutput = resolveFinalOutput(scratch) || scratch.lastOutput;
 }
 
@@ -88,10 +114,19 @@ export function resetRunState(modeUsed: 'linear' | 'agent', inputText: string) {
     runState.currentStepId = null;
     runState.stepStatuses = {};
     runState.modeUsed = modeUsed;
+    runState.failedStepId = null;
+    runState.failedRoundIndex = null;
+    runState.canResume = false;
 
     for (const step of settingsState.workflow) {
         runState.stepStatuses[step.id] = step.enabled === false ? 'skipped' : 'pending';
     }
+}
+
+function clearResumePoint() {
+    runState.failedStepId = null;
+    runState.failedRoundIndex = null;
+    runState.canResume = false;
 }
 export function buildInterpolationMap(step: WorkflowStep, scratch: ScratchData, extra: any = {}) {
     return {
@@ -309,15 +344,37 @@ async function tick() {
     await new Promise(resolve => setTimeout(resolve, 0));
 }
 
+function withQuietStageTimeout<T>(promise: Promise<T>, step: WorkflowStep): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<T>((_resolve, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(new Error(`「${step.title}」静默生成超过 10 分钟未返回，已停止等待。`));
+        }, QUIET_STAGE_TIMEOUT_MS);
+    });
+
+    return Promise.race([promise, timeout]).finally(() => {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+    });
+}
+
 export async function runQuietStage(step: WorkflowStep, scratch: ScratchData, options = {}) {
     const context = getContext();
     const promptTemplate = buildStepPromptTemplate(step, scratch);
     const prompt = interpolateTemplate(promptTemplate, buildInterpolationMap(step, scratch, options));
-    const result = await context.generateQuietPrompt({ 
-        quietPrompt: prompt,
-        quietToLoud: true, 
-        skipWIAN: true, // 避免一些无关注入
-    });
+    const generation = step.omitWorldInfoAndPreset === true
+        ? context.generateRaw({
+            prompt,
+            quietToLoud: true,
+            trimNames: false,
+        })
+        : context.generateQuietPrompt({
+            quietPrompt: prompt,
+            quietToLoud: true,
+            skipWIAN: true, // 避免一些无关注入
+        });
+    const result = await withQuietStageTimeout(generation, step);
     return String(result ?? '').trim();
 }
 
@@ -339,7 +396,7 @@ export function ensureChatContext() {
     return true;
 }
 
-export async function finalizeAssistantOutput(output: string, modeUsed: 'linear' | 'agent', scratch: ScratchData) {
+export async function finalizeAssistantOutput(output: string, modeUsed: WorkflowMode, scratch: ScratchData) {
     const context = getContext();
     await saveReply({ type: 'normal', getMessage: output });
 
@@ -354,6 +411,7 @@ export async function finalizeAssistantOutput(output: string, modeUsed: 'linear'
                 rounds: step.rounds,
                 outputVarName: step.outputVarName || undefined,
                 isEditTool: step.isEditTool === true,
+                omitWorldInfoAndPreset: step.omitWorldInfoAndPreset === true,
             })),
             finalOutputTemplate: settingsState.finalOutputTemplate,
             generatedAt: new Date().toISOString(),
@@ -363,13 +421,115 @@ export async function finalizeAssistantOutput(output: string, modeUsed: 'linear'
     await context.saveChat();
 
     runState.finalOutput = output;
-    runState.lastScratch = scratch;
+    runState.lastScratch = cloneScratchData(scratch);
     runState.status = 'Alyce 已完成，并把最终答案写回聊天。';
     runState.statusKind = 'idle';
     runState.isRunning = false;
+    runState.currentStepId = null;
+    clearResumePoint();
 }
 
-export async function runAlyceTurn(inputText: string, modeUsed: 'linear' | 'agent', options: { clearMainInput?: boolean, messageAlreadySent?: boolean } = {}) {
+async function finalizeScratch(scratch: ScratchData, modeUsed: WorkflowMode) {
+    runState.currentStepId = null;
+    clearResumePoint();
+
+    const finalOutput = resolveFinalOutput(scratch);
+    if (!String(finalOutput).trim()) {
+        throw new Error('Alyce 生成了空的最终结果。');
+    }
+
+    await finalizeAssistantOutput(finalOutput, modeUsed, scratch);
+}
+
+async function executeWorkflowFrom(scratch: ScratchData, modeUsed: WorkflowMode, options: WorkflowExecutionOptions = {}) {
+    const runnableWorkflow = getRunnableWorkflow();
+    const assetNameMap = buildAssetNameMap(runnableWorkflow);
+    let reachedStart = !options.startStepId;
+
+    for (const step of runnableWorkflow) {
+        if (!reachedStart) {
+            if (step.id !== options.startStepId) {
+                continue;
+            }
+            reachedStart = true;
+        }
+
+        runState.currentStepId = step.id;
+        setStepStatus(step.id, 'in_progress');
+        runState.status = `正在执行${step.title}...`;
+        await tick();
+
+        const rounds = step.rounds && step.rounds > 1 ? step.rounds : 1;
+        const firstRound = step.id === options.startStepId
+            ? Math.min(rounds, Math.max(1, options.startRoundIndex || 1))
+            : 1;
+
+        for (let index = firstRound; index <= rounds; index++) {
+            runState.failedStepId = step.id;
+            runState.failedRoundIndex = index;
+
+            const rawOutput = await runQuietStage(step, scratch, { revisionIndex: index, revisionCount: rounds });
+            let output = rawOutput;
+            let meta = step.description || '已完成';
+
+            if (step.isEditTool === true) {
+                const editResult = applyAssetEdit(rawOutput, scratch, getStepOutputVarName(step, assetNameMap));
+                scratch.outputs = editResult.outputs;
+                scratch.lastOutput = editResult.lastOutput;
+
+                output = scratch.lastOutput;
+                const editedSummary = editResult.editedVarNames.length
+                    ? `已应用 ${editResult.appliedCount} 处编辑：${editResult.editedVarNames.map(name => `{{${name}}}`).join('、')}`
+                    : '未应用编辑';
+                const skippedSummary = editResult.skippedEdits.length
+                    ? ` · 已跳过 ${editResult.skippedEdits.length} 处：${editResult.skippedEdits.join('；')}`
+                    : '';
+                meta = `${meta} · ${editedSummary}${skippedSummary}`;
+                pushEvent(
+                    editResult.skippedEdits.length ? 'error' : 'tool',
+                    editResult.skippedEdits.length ? '增量编辑部分跳过' : '增量编辑已应用',
+                    rawOutput,
+                    `匹配 ${editResult.matchCount} 处，更新 ${editResult.editedVarNames.join(', ') || '无'}${skippedSummary}`
+                );
+            } else {
+                const outputVarName = saveStepOutput(step, scratch, rawOutput, assetNameMap);
+                meta = step.description || `已保存为 {{${outputVarName}}}`;
+            }
+
+            const phaseTitle = rounds > 1 ? `${step.title} ${index}/${rounds}` : step.title;
+            pushEvent('thinking', phaseTitle, output, meta || '该环节已执行。');
+            await tick();
+        }
+
+        syncRunArtifacts(scratch);
+        setStepStatus(step.id, 'completed');
+        await tick();
+    }
+
+    if (!reachedStart && options.startStepId) {
+        throw new Error('找不到可继续的工作流环节，请重新开始本轮 Alyce。');
+    }
+
+    await finalizeScratch(scratch, modeUsed);
+}
+
+function handleWorkflowFailure(error: any, scratch: ScratchData) {
+    if (runState.failedStepId) {
+        setStepStatus(runState.failedStepId, 'error');
+    }
+
+    runState.currentStepId = null;
+    runState.isRunning = false;
+    runState.statusKind = 'error';
+    runState.status = error?.message ? `Alyce 失败：${error.message}` : 'Alyce 失败。';
+    syncRunArtifacts(scratch);
+    runState.canResume = Boolean(String(scratch.input || '').trim());
+    pushEvent('error', '运行失败', error?.message || String(error), '可以点击继续从中断处恢复，或点击重新开始从头再跑一次。');
+    console.error('[Alyce]', error);
+    toastr.error(error?.message || 'Alyce 运行失败。');
+}
+
+export async function runAlyceTurn(inputText: string, modeUsed: WorkflowMode, options: { clearMainInput?: boolean, messageAlreadySent?: boolean } = {}) {
     if (runState.isRunning) {
         toastr.info('Alyce 正在处理中。');
         return;
@@ -414,71 +574,73 @@ export async function runAlyceTurn(inputText: string, modeUsed: 'linear' | 'agen
         }
         await tick();
 
-        const runnableWorkflow = getRunnableWorkflow();
-        const assetNameMap = buildAssetNameMap(runnableWorkflow);
-
-        for (const step of runnableWorkflow) {
-            runState.currentStepId = step.id;
-            setStepStatus(step.id, 'in_progress');
-            runState.status = `正在执行${step.title}...`;
-            await tick();
-
-            const rounds = step.rounds && step.rounds > 1 ? step.rounds : 1;
-
-            for (let index = 1; index <= rounds; index++) {
-                const rawOutput = await runQuietStage(step, scratch, { revisionIndex: index, revisionCount: rounds });
-                let output = rawOutput;
-                let meta = step.description || '已完成';
-
-                if (step.isEditTool === true) {
-                    const editResult = applyAssetEdit(rawOutput, scratch, getStepOutputVarName(step, assetNameMap));
-                    scratch.outputs = editResult.outputs;
-                    scratch.lastOutput = editResult.lastOutput;
-
-                    output = scratch.lastOutput;
-                    const editedSummary = editResult.editedVarNames.length
-                        ? `已应用 ${editResult.appliedCount} 处编辑：${editResult.editedVarNames.map(name => `{{${name}}}`).join('、')}`
-                        : '未应用编辑';
-                    const skippedSummary = editResult.skippedEdits.length
-                        ? ` · 已跳过 ${editResult.skippedEdits.length} 处：${editResult.skippedEdits.join('；')}`
-                        : '';
-                    meta = `${meta} · ${editedSummary}${skippedSummary}`;
-                    pushEvent(
-                        editResult.skippedEdits.length ? 'error' : 'tool',
-                        editResult.skippedEdits.length ? '增量编辑部分跳过' : '增量编辑已应用',
-                        rawOutput,
-                        `匹配 ${editResult.matchCount} 处，更新 ${editResult.editedVarNames.join(', ') || '无'}${skippedSummary}`
-                    );
-                } else {
-                    const outputVarName = saveStepOutput(step, scratch, rawOutput, assetNameMap);
-                    meta = step.description || `已保存为 {{${outputVarName}}}`;
-                }
-
-                const phaseTitle = rounds > 1 ? `${step.title} ${index}/${rounds}` : step.title;
-                pushEvent('thinking', phaseTitle, output, meta || '该环节已执行。');
-                await tick();
-            }
-
-            syncRunArtifacts(scratch);
-            setStepStatus(step.id, 'completed');
-            await tick();
-        }
-
-        runState.currentStepId = null;
-        const finalOutput = resolveFinalOutput(scratch);
-        if (!String(finalOutput).trim()) {
-            throw new Error('Alyce 生成了空的最终结果。');
-        }
-        await finalizeAssistantOutput(finalOutput, modeUsed, scratch);
+        await executeWorkflowFrom(scratch, modeUsed);
         toastr.success('Alyce 已完成本轮处理。');
     } catch (error: any) {
-        runState.currentStepId = null;
-        runState.isRunning = false;
-        runState.statusKind = 'error';
-        runState.status = error?.message ? `Alyce 失败：${error.message}` : 'Alyce 失败。';
-        syncRunArtifacts(scratch);
-        pushEvent('error', '运行失败', error?.message || String(error), '如有需要，请到浏览器控制台查看详细信息。');
-        console.error('[Alyce]', error);
-        toastr.error(error?.message || 'Alyce 运行失败。');
+        handleWorkflowFailure(error, scratch);
     }
+}
+
+export async function resumeAlyceTurn() {
+    if (runState.isRunning) {
+        toastr.info('Alyce 正在处理中。');
+        return;
+    }
+
+    if (!runState.canResume || !runState.lastScratch) {
+        toastr.warning('当前没有可以继续的 Alyce 运行。');
+        return;
+    }
+
+    if (!ensureChatContext()) return;
+
+    if (!settingsState.workflow.some(step => step.enabled !== false)) {
+        toastr.warning('请至少启用一个 Alyce 环节。');
+        return;
+    }
+
+    const failedStepId = runState.failedStepId;
+    const failedRoundIndex = runState.failedRoundIndex || 1;
+    const modeUsed = runState.modeUsed || settingsState.mode;
+    const scratch = cloneScratchData(runState.lastScratch);
+
+    runState.isRunning = true;
+    runState.statusKind = 'running';
+    runState.status = 'Alyce 正在从中断处继续。';
+    runState.canResume = false;
+    await tick();
+
+    try {
+        if (failedStepId) {
+            const failedStep = getRunnableWorkflow().find(step => step.id === failedStepId);
+            if (!failedStep) {
+                throw new Error('找不到可继续的工作流环节，请重新开始本轮 Alyce。');
+            }
+            pushEvent('system', '继续执行', `从「${failedStep.title}」第 ${failedRoundIndex} 轮继续。`, '已保留中断前完成的资产。');
+            await tick();
+            await executeWorkflowFrom(scratch, modeUsed, { startStepId: failedStepId, startRoundIndex: failedRoundIndex });
+        } else {
+            pushEvent('system', '继续写回最终输出', '工作流环节已经完成，正在重新尝试写回最终输出。', '已保留中断前完成的资产。');
+            await tick();
+            await finalizeScratch(scratch, modeUsed);
+        }
+        toastr.success('Alyce 已继续完成本轮处理。');
+    } catch (error: any) {
+        handleWorkflowFailure(error, scratch);
+    }
+}
+
+export async function restartAlyceTurn() {
+    if (runState.isRunning) {
+        toastr.info('Alyce 正在处理中。');
+        return;
+    }
+
+    const input = String(runState.lastInput || '').trim();
+    if (!input) {
+        toastr.warning('当前没有可以重新开始的 Alyce 输入。');
+        return;
+    }
+
+    await runAlyceTurn(input, runState.modeUsed || settingsState.mode, { messageAlreadySent: true });
 }

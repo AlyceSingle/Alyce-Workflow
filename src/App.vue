@@ -104,7 +104,7 @@
             <div class="alyce__agentStream" ref="streamContainer">
               <div v-if="!runState.events.length" class="alyce__emptyCard">
                 <strong>还没有进度事件</strong>
-              <p>先在聊天楼层发送一条消息，或在下方输入内容。事件会按执行顺序持续追加在这里。</p>
+              <p>先在聊天楼层发送一条消息。事件会按执行顺序持续追加在这里。</p>
               </div>
               <article v-else v-for="(event, i) in runState.events" :key="i" class="alyce__streamItem">
                 <div class="alyce__streamHeader">
@@ -134,16 +134,10 @@
               </article>
             </div>
 
-            <div class="alyce__composer">
-              <label class="alyce__composerLabel" for="alyce_agent_input">发送给 AI</label>
-              <textarea
-                id="alyce_agent_input"
-                data-macros-autocomplete="hide"
-                rows="4"
-                v-model="agentInput"
-              ></textarea>
+            <div v-if="runState.statusKind === 'error' && runState.canResume" class="alyce__composer alyce__resumePanel">
               <div class="alyce__composerActions">
-                <button class="menu_button" @click="handleAgentSend">发送</button>
+                <button class="menu_button" :disabled="runState.isRunning" @click="handleResumeRun">继续</button>
+                <button class="menu_button alyce__secondaryAction" :disabled="runState.isRunning" @click="handleRestartRun">重新开始</button>
               </div>
             </div>
           </section>
@@ -183,10 +177,6 @@
 
             <div class="alyce__detailsPanel">
               <div class="alyce__detailCard">
-                <div class="alyce__detailCardTitle">执行说明</div>
-                <div class="alyce__detailBody">{{ shorten(toolCallingSnapshot.note, 500) }}</div>
-              </div>
-              <div class="alyce__detailCard">
                 <div class="alyce__detailCardTitle">当前状态</div>
                 <div class="alyce__detailBody">{{ currentStatus }}</div>
               </div>
@@ -202,15 +192,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
 import { settingsState, saveSettings, DEFAULT_FINAL_OUTPUT_TEMPLATE, DEFAULT_STATUS, ENABLED_IDLE_STATUS, createCustomStep } from './store/settings';
-import { runState, runAlyceTurn } from './composables/useWorkflow';
-import { escapeHtml, getConnectionSnapshot, getToolCallingSnapshot, shorten } from './composables/useSillyTavern';
+import { runState, resumeAlyceTurn, restartAlyceTurn } from './composables/useWorkflow';
+import { escapeHtml, getConnectionSnapshot, shorten } from './composables/useSillyTavern';
 import WorkflowStep from './components/WorkflowStep.vue';
 import PromptEditor from './components/PromptEditor.vue';
 import SettingsToggle from './components/SettingsToggle.vue';
 import { Popup, POPUP_TYPE } from 'st-popup';
 
 const connectionSnapshot = computed(() => getConnectionSnapshot());
-const toolCallingSnapshot = computed(() => getToolCallingSnapshot());
 
 const selectedStepId = ref<string | null>(settingsState.workflow[0]?.id || null);
 const selectedStep = computed(() => settingsState.workflow.find(s => s.id === selectedStepId.value));
@@ -220,7 +209,6 @@ const isError = computed(() => runState.statusKind === 'error');
 const currentStatus = computed(() => runState.status || (settingsState.enabled ? ENABLED_IDLE_STATUS : DEFAULT_STATUS));
 
 const streamContainer = ref<HTMLElement | null>(null);
-const agentInput = ref('');
 
 const completedTasks = computed(() => Object.values(runState.stepStatuses).filter(s => s === 'completed').length);
 const totalTasks = computed(() => settingsState.workflow.filter(s => s.enabled !== false).length);
@@ -280,6 +268,7 @@ function getTodoStatusLabel(step: any) {
   const status = runState.stepStatuses[step.id] || 'pending';
   if (status === 'completed') return '完成';
   if (status === 'in_progress') return '进行中';
+  if (status === 'error') return '中断';
   return '待执行';
 }
 
@@ -293,14 +282,12 @@ function getTodoMeta(step: any) {
   return step.description || '环节';
 }
 
-async function handleAgentSend() {
-  const prompt = agentInput.value.trim();
-  if (!prompt) {
-    toastr.warning('请输入要发送给 AI 的内容。');
-    return;
-  }
-  await runAlyceTurn(prompt, 'agent');
-  agentInput.value = '';
+async function handleResumeRun() {
+  await resumeAlyceTurn();
+}
+
+async function handleRestartRun() {
+  await restartAlyceTurn();
 }
 
 function updateFinalOutputTemplate(template: string) {
