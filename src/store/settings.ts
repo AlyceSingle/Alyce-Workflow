@@ -14,7 +14,8 @@ export const DEFAULT_CUSTOM_PROMPT = `请对当前工作初稿执行一个额外
 上一步输出：
 {{previous_output}}`;
 
-export const DEFAULT_FINAL_OUTPUT_TEMPLATE = '{{previous_output}}';
+export const DEFAULT_FINAL_OUTPUT_TEMPLATE = `{{thinking}}
+{{content}}`;
 
 export const DEFAULT_STATUS = '未启用。勾选“启用 Alyce”后，直接在聊天输入框发送消息即可接管本轮生成。';
 export const ENABLED_IDLE_STATUS = 'Alyce 已启用。直接在聊天输入框发送消息即可接管本轮生成。';
@@ -53,7 +54,61 @@ export function createCustomStep(): WorkflowStep {
 }
 
 function createDefaultWorkflow(): WorkflowStep[] {
-    return [createCustomStep()];
+    return [
+        {
+            id: '5a498c4d-9925-495b-be96-c019f222f2fc',
+            title: '思考🤔',
+            description: 'AI构思如何书写文章',
+            prompt: `你需要根据上文预设内容，构思如何写好这次文章
+
+1.读取预设内容，确保充分理解预设指导
+
+2.根据预设思维链，逐步思考，并给出答案
+
+3.构思内容大纲，并输出大纲内容
+
+**注意：你只需要输出思维链内容，不需要输出正文内容，思维链至少2000字**`,
+            enabled: true,
+            rounds: 1,
+            outputVarName: 'thinking',
+            isEditTool: false,
+        },
+        {
+            id: '4076f74c-7cf7-492c-a361-0122275abfdf',
+            title: '正文',
+            description: '输出正文的初稿',
+            prompt: `以下为已经思考过的内容
+思维链如下：
+{{thinking}}
+
+你需要根据已经思考过的思维链，遵循预设和思维链的指导，输出正文
+
+**注意：你不要再输出思维链，只需要输出正文内容**`,
+            enabled: true,
+            rounds: 1,
+            outputVarName: 'content',
+            isEditTool: false,
+        },
+        {
+            id: 'f62ae375-4ea5-446d-ace3-c445de423dd9',
+            title: '编辑',
+            description: 'AI再次回顾正文，对文章进行整改',
+            prompt: `以下为已经写出的完整文章
+
+文章如下:
+content:{{content}}
+
+你阅读指导，查看content是否符合指导要求
+并通过EDIT工具，编辑content，例如[EDIT: content]，可在本次输出中多次使用修改正文
+
+**注意，你只需按格式调用编辑工具，无需输出其他内容**
+`,
+            enabled: true,
+            rounds: 1,
+            outputVarName: '',
+            isEditTool: true,
+        },
+    ];
 }
 
 function normalizeStep(step: any): WorkflowStep {

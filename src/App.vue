@@ -15,7 +15,6 @@
         <div class="alyce__chip"><span class="alyce__chipLabel">来源</span><strong>{{ connectionSnapshot.source }}</strong></div>
         <div class="alyce__chip"><span class="alyce__chipLabel">模型</span><strong>{{ connectionSnapshot.model }}</strong></div>
         <div class="alyce__chip"><span class="alyce__chipLabel">预设</span><strong>{{ connectionSnapshot.preset }}</strong></div>
-        <div class="alyce__chip"><span class="alyce__chipLabel">工具</span><strong>{{ toolCallingSnapshot.liveTools ? '实时可用' : '以编排为主' }}</strong></div>
       </div>
 
       <SettingsToggle />
